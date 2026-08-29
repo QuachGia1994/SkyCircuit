@@ -21,7 +21,20 @@ jobs:
       - name: Build iOS 27 Simulator
         run: xcodebuild -project SkyCircuitNative.xcodeproj -scheme SkyCircuitNative -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug -derivedDataPath ../../build/native-ios CODE_SIGNING_ALLOWED=NO build
         working-directory: native/ios
+      - name: Build unsigned iPhone app
+        run: xcodebuild -project SkyCircuitNative.xcodeproj -scheme SkyCircuitNative -sdk iphoneos -destination 'generic/platform=iOS' -configuration Debug -derivedDataPath ../../build/native-ios-device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+        working-directory: native/ios
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/native-ios-ipa/Payload
+          cp -R build/native-ios-device/Build/Products/Debug-iphoneos/SkyCircuit.app build/native-ios-ipa/Payload/
+          cd build/native-ios-ipa
+          zip -qry SkyCircuit-Native-V2-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyCircuit-Native-iOS-V2
+          name: SkyCircuit-Native-iOS-V2-Simulator
           path: build/native-ios/Build/Products/Debug-iphonesimulator/SkyCircuit.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyCircuit-Native-iOS-V2-Unsigned-IPA
+          path: build/native-ios-ipa/SkyCircuit-Native-V2-unsigned.ipa
