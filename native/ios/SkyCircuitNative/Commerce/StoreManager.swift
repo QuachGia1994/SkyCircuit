@@ -17,10 +17,6 @@ final class StoreManager {
         }
     }
 
-    deinit {
-        observerTask?.cancel()
-    }
-
     func loadProducts() async {
         do {
             products = try await Product.products(for: productIDs)
