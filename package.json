@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "build": "node scripts/build.mjs",
+    "assets:generate": "npx capacitor-assets generate",
     "cap:add:android": "npx cap add android",
     "cap:add:ios": "npx cap add ios",
     "cap:sync": "npx cap sync"
@@ -16,6 +17,7 @@
     "@capacitor/ios": "^8.0.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.0.0"
   }
 }

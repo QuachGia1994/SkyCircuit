@@ -6,4 +6,5 @@ await Promise.all([
   cp('index.html', 'dist/index.html'),
   cp('styles.css', 'dist/styles.css'),
   cp('src', 'dist/src', { recursive: true }),
+  cp('assets', 'dist/assets', { recursive: true }),
 ])

@@ -1,0 +1,68 @@
+export const skins = Object.freeze({
+  classic: Object.freeze({
+    key: 'classic',
+    name: 'Classic Circuit',
+    plus: false,
+    tile: '#101d34',
+    tileBorder: '#2b4261',
+    conduit: '#80e9ff',
+    powered: '#ffd166',
+    spark: '#ff8f5a',
+    rocket: '#ff7ab8',
+    backgroundTop: '#0b1d38',
+    backgroundBottom: '#050b14',
+    cssAccent: '#7be8ff',
+    cssAccentAlt: '#396bea',
+  }),
+  novaGold: Object.freeze({
+    key: 'novaGold',
+    name: 'Nova Gold',
+    plus: true,
+    tile: '#21190f',
+    tileBorder: '#6f5126',
+    conduit: '#f4bb55',
+    powered: '#fff0a3',
+    spark: '#ff9b43',
+    rocket: '#ffc94c',
+    backgroundTop: '#271b15',
+    backgroundBottom: '#08070b',
+    cssAccent: '#f4bb55',
+    cssAccentAlt: '#cb7a27',
+  }),
+  nebulaViolet: Object.freeze({
+    key: 'nebulaViolet',
+    name: 'Nebula Violet',
+    plus: true,
+    tile: '#1b1230',
+    tileBorder: '#5e3c8c',
+    conduit: '#c58cff',
+    powered: '#ff9cf7',
+    spark: '#ff78d7',
+    rocket: '#b76cff',
+    backgroundTop: '#261347',
+    backgroundBottom: '#080714',
+    cssAccent: '#c58cff',
+    cssAccentAlt: '#7d4fe2',
+  }),
+  plasmaChrome: Object.freeze({
+    key: 'plasmaChrome',
+    name: 'Plasma Chrome',
+    plus: true,
+    tile: '#111b27',
+    tileBorder: '#49677e',
+    conduit: '#9bd6ff',
+    powered: '#b8f5ff',
+    spark: '#63c8ff',
+    rocket: '#6ba7ff',
+    backgroundTop: '#10263b',
+    backgroundBottom: '#050a10',
+    cssAccent: '#83d7ff',
+    cssAccentAlt: '#397fd6',
+  }),
+})
+
+export const skinList = Object.freeze(Object.values(skins))
+
+export function getSkin(key) {
+  return skins[key] ?? skins.classic
+}

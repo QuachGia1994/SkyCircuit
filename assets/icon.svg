@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SkyCircuit app icon</title>
+  <desc id="desc">A glowing circuit pipe ignites toward a pink rocket over a deep-space background.</desc>
+  <defs>
+    <radialGradient id="space" cx="50%" cy="38%" r="72%">
+      <stop offset="0" stop-color="#183f78" />
+      <stop offset="0.52" stop-color="#071a36" />
+      <stop offset="1" stop-color="#020712" />
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#91add4" />
+      <stop offset="0.35" stop-color="#34465e" />
+      <stop offset="0.68" stop-color="#18263a" />
+      <stop offset="1" stop-color="#6681a6" />
+    </linearGradient>
+    <linearGradient id="energy" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff6b4" />
+      <stop offset="0.42" stop-color="#ffd166" />
+      <stop offset="1" stop-color="#ff7b39" />
+    </linearGradient>
+    <linearGradient id="rocket" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff9bd0" />
+      <stop offset="0.55" stop-color="#ff4da5" />
+      <stop offset="1" stop-color="#9c2f8f" />
+    </linearGradient>
+    <filter id="cyanGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="fireGlow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="22" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <clipPath id="rounded"><rect x="42" y="42" width="940" height="940" rx="210" /></clipPath>
+  </defs>
+
+  <g clip-path="url(#rounded)">
+    <rect width="1024" height="1024" fill="url(#space)" />
+    <g fill="#c9efff" opacity="0.9">
+      <circle cx="170" cy="180" r="4"/><circle cx="294" cy="116" r="3"/><circle cx="458" cy="196" r="4"/><circle cx="712" cy="146" r="3"/><circle cx="844" cy="254" r="4"/><circle cx="128" cy="440" r="3"/><circle cx="886" cy="594" r="3"/><circle cx="604" cy="844" r="4"/>
+    </g>
+    <circle cx="760" cy="182" r="9" fill="#dff7ff" filter="url(#cyanGlow)"/>
+
+    <g stroke-linecap="round" stroke-linejoin="round">
+      <path d="M186 734 H430 V548 H694" fill="none" stroke="#101a29" stroke-width="134"/>
+      <path d="M186 734 H430 V548 H694" fill="none" stroke="url(#metal)" stroke-width="102"/>
+      <path d="M186 734 H430 V548 H694" fill="none" stroke="#08111d" stroke-width="48"/>
+      <path d="M186 734 H430 V548 H694" fill="none" stroke="url(#energy)" stroke-width="28" filter="url(#fireGlow)"/>
+    </g>
+
+    <g transform="translate(188 734)">
+      <circle r="92" fill="#101925" stroke="#7188a7" stroke-width="18"/>
+      <circle r="58" fill="#29150d" stroke="#ff9c43" stroke-width="12"/>
+      <circle r="24" fill="#fff7bf" filter="url(#fireGlow)"/>
+      <path d="M-66 -14 L-105 -38 M-63 21 L-110 49 M-5 -64 L-18 -108 M35 -52 L68 -89" stroke="#ff9c43" stroke-width="9" stroke-linecap="round"/>
+    </g>
+
+    <g transform="translate(738 432) rotate(34)">
+      <path d="M0 -190 C92 -98 104 58 0 168 C-104 58 -92 -98 0 -190Z" fill="url(#rocket)" stroke="#ffd8ee" stroke-width="11"/>
+      <path d="M-70 22 L-142 116 L-58 92 Z" fill="#d63891" stroke="#ffb6df" stroke-width="9"/>
+      <path d="M70 22 L142 116 L58 92 Z" fill="#d63891" stroke="#ffb6df" stroke-width="9"/>
+      <circle cy="-54" r="42" fill="#0f3152" stroke="#b7efff" stroke-width="12"/>
+      <circle cy="-54" r="22" fill="#59dbff" filter="url(#cyanGlow)"/>
+      <path d="M-38 154 L0 250 L38 154 Z" fill="url(#energy)" filter="url(#fireGlow)"/>
+    </g>
+
+    <path d="M612 550 C654 548 687 535 718 514" fill="none" stroke="#fff7c5" stroke-width="16" stroke-linecap="round" filter="url(#fireGlow)"/>
+  </g>
+
+  <rect x="42" y="42" width="940" height="940" rx="210" fill="none" stroke="#74dfff" stroke-width="14" opacity="0.92" filter="url(#cyanGlow)"/>
+</svg>

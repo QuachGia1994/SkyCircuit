@@ -60,6 +60,7 @@ export class Board {
     const seen = new Set()
     const burned = []
     const rocketRows = new Set()
+    const burnStages = []
 
     for (let row = 0; row < this.rows; row += 1) {
       const startKey = this.key(row, 0)
@@ -68,38 +69,81 @@ export class Board {
       if (component.rocketRows.size === 0) continue
       burned.push(...component.cells)
       for (const rocketRow of component.rocketRows) rocketRows.add(rocketRow)
+      this.mergeBurnStages(burnStages, this.traceBurnStages(component.cells, component.sourceCells))
     }
 
     burned.sort((a, b) => a.row - b.row || a.col - b.col)
-    return { burned, rocketRows: [...rocketRows].sort((a, b) => a - b) }
+    for (const stage of burnStages) stage.sort((a, b) => a.row - b.row || a.col - b.col)
+    return { burned, rocketRows: [...rocketRows].sort((a, b) => a - b), burnStages }
   }
 
   traceComponent(startRow, startCol, seen) {
     const queue = [{ row: startRow, col: startCol }]
     const cells = []
+    const sourceCells = []
     const rocketRows = new Set()
     seen.add(this.key(startRow, startCol))
 
     while (queue.length > 0) {
       const cell = queue.shift()
-      cells.push(cell)
       const mask = this.cells[cell.row][cell.col]
+      cells.push(cell)
+      if (cell.col === 0 && (mask & Direction.WEST) !== 0) sourceCells.push(cell)
+      if (cell.col === this.cols - 1 && (mask & Direction.EAST) !== 0) rocketRows.add(cell.row)
 
-      for (const step of directionSteps) {
-        if ((mask & step.bit) === 0) continue
-        if (step.bit === Direction.EAST && cell.col === this.cols - 1) rocketRows.add(cell.row)
-        const nextRow = cell.row + step.row
-        const nextCol = cell.col + step.col
-        if (!this.isInside(nextRow, nextCol)) continue
-        if ((this.cells[nextRow][nextCol] & step.opposite) === 0) continue
-        const nextKey = this.key(nextRow, nextCol)
+      for (const next of this.connectedNeighbors(cell.row, cell.col)) {
+        const nextKey = this.key(next.row, next.col)
         if (seen.has(nextKey)) continue
         seen.add(nextKey)
-        queue.push({ row: nextRow, col: nextCol })
+        queue.push(next)
       }
     }
 
-    return { cells, rocketRows }
+    return { cells, sourceCells, rocketRows }
+  }
+
+  traceBurnStages(cells, sourceCells) {
+    const allowed = new Set(cells.map(({ row, col }) => this.key(row, col)))
+    const visited = new Set()
+    const queue = sourceCells.map(({ row, col }) => ({ row, col, distance: 0 }))
+    const stages = []
+    for (const source of sourceCells) visited.add(this.key(source.row, source.col))
+
+    while (queue.length > 0) {
+      const cell = queue.shift()
+      if (!stages[cell.distance]) stages[cell.distance] = []
+      stages[cell.distance].push({ row: cell.row, col: cell.col })
+
+      for (const next of this.connectedNeighbors(cell.row, cell.col)) {
+        const nextKey = this.key(next.row, next.col)
+        if (!allowed.has(nextKey) || visited.has(nextKey)) continue
+        visited.add(nextKey)
+        queue.push({ row: next.row, col: next.col, distance: cell.distance + 1 })
+      }
+    }
+
+    return stages
+  }
+
+  connectedNeighbors(row, col) {
+    const mask = this.cells[row][col]
+    const neighbors = []
+    for (const step of directionSteps) {
+      if ((mask & step.bit) === 0) continue
+      const nextRow = row + step.row
+      const nextCol = col + step.col
+      if (!this.isInside(nextRow, nextCol)) continue
+      if ((this.cells[nextRow][nextCol] & step.opposite) === 0) continue
+      neighbors.push({ row: nextRow, col: nextCol })
+    }
+    return neighbors
+  }
+
+  mergeBurnStages(target, incoming) {
+    incoming.forEach((stage, index) => {
+      if (!target[index]) target[index] = []
+      target[index].push(...stage)
+    })
   }
 
   consume(cells) {

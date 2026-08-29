@@ -19,6 +19,11 @@ test('resolveLaunch finds a straight source-to-rocket path', () => {
     { row: 0, col: 1 },
     { row: 0, col: 2 },
   ])
+  assert.deepEqual(result.burnStages, [
+    [{ row: 0, col: 0 }],
+    [{ row: 0, col: 1 }],
+    [{ row: 0, col: 2 }],
+  ])
 })
 
 test('resolveLaunch burns only source components that reach a rocket', () => {
@@ -43,6 +48,25 @@ test('resolveLaunch supports one source component launching multiple rockets', (
   const result = board.resolveLaunch()
 
   assert.deepEqual(result.rocketRows, [0, 1, 2])
+  assert.deepEqual(result.burnStages[0], [{ row: 1, col: 0 }])
+  assert.deepEqual(result.burnStages.at(-1), [
+    { row: 0, col: 2 },
+    { row: 2, col: 2 },
+  ])
+})
+
+test('burn stages ignite from every source in one connected component', () => {
+  const board = Board.fromMasks([
+    [Direction.WEST | Direction.EAST | Direction.SOUTH, Direction.WEST | Direction.EAST | Direction.SOUTH],
+    [Direction.WEST | Direction.EAST | Direction.NORTH, Direction.WEST | Direction.EAST | Direction.NORTH],
+  ])
+
+  const result = board.resolveLaunch()
+
+  assert.deepEqual(result.burnStages, [
+    [{ row: 0, col: 0 }, { row: 1, col: 0 }],
+    [{ row: 0, col: 1 }, { row: 1, col: 1 }],
+  ])
 })
 
 test('resolveLaunch handles closed loops without revisiting forever', () => {
@@ -57,7 +81,7 @@ test('resolveLaunch handles closed loops without revisiting forever', () => {
 
   const result = board.resolveLaunch()
 
-  assert.deepEqual(result, { burned: [], rocketRows: [] })
+  assert.deepEqual(result, { burned: [], rocketRows: [], burnStages: [] })
 })
 
 test('consume collapses surviving tiles downward and refills from the top', () => {

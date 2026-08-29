@@ -17,6 +17,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx cap add ios
+      - run: npx capacitor-assets generate --ios
       - run: npx cap sync ios
       - run: xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
       - run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO build

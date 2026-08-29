@@ -5,27 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#07111f" />
     <title>SkyCircuit</title>
+    <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div>
+        <div class="brand-block">
           <p class="eyebrow">FIREWORK CIRCUIT PUZZLE</p>
           <h1>SkyCircuit</h1>
+          <span id="mode-label" class="mode-label">Classic</span>
         </div>
-        <div class="level-badge">LEVEL <span id="level">1</span></div>
+        <div class="top-actions">
+          <button id="help-button" class="icon-button" type="button" aria-label="How to play">?</button>
+          <button id="plus-button" class="plus-button" type="button">PLUS</button>
+          <div class="level-badge">
+            <span>LEVEL <strong id="level">1</strong></span>
+            <small><b id="rockets">0</b>/<b id="target">8</b> ROCKETS</small>
+          </div>
+        </div>
       </header>
 
       <section class="hud" aria-label="Game status">
         <div class="stat"><span>SCORE</span><strong id="score">0</strong></div>
-        <div class="stat"><span>ROCKETS</span><strong><span id="rockets">0</span>/<span id="target">8</span></strong></div>
+        <div class="stat"><span>COMBO</span><strong id="combo">×1</strong></div>
         <div class="stat"><span>TIME</span><strong id="time">70</strong></div>
         <div class="stat"><span>BEST</span><strong id="best">0</strong></div>
       </section>
 
       <section class="game-frame">
         <canvas id="game" width="768" height="720" aria-label="SkyCircuit puzzle board"></canvas>
+        <div id="burn-banner" class="burn-banner" hidden><span></span> IGNITION <span></span></div>
         <div id="overlay" class="overlay" hidden>
           <strong id="overlay-title"></strong>
           <span id="overlay-copy"></span>
@@ -39,6 +49,77 @@
         <button id="restart" type="button" class="primary">New Game</button>
       </nav>
     </main>
+
+    <section id="tutorial" class="modal-layer tutorial-layer" role="dialog" aria-modal="true" aria-labelledby="tutorial-title" hidden>
+      <div class="tutorial-card">
+        <div class="tutorial-demo" aria-hidden="true">
+          <div class="demo-source"></div>
+          <div class="demo-pipe demo-pipe-a"></div>
+          <div class="demo-pipe demo-pipe-b"></div>
+          <div class="demo-pipe demo-pipe-c"></div>
+          <div class="demo-burn"></div>
+          <div class="demo-rocket">▲</div>
+        </div>
+        <div class="tutorial-copy">
+          <div class="tutorial-kicker"><span id="tutorial-number">1</span><b id="tutorial-eyebrow">ROTATE</b></div>
+          <h2 id="tutorial-title">Tap a tile to rotate</h2>
+          <p id="tutorial-body"></p>
+          <div id="tutorial-dots" class="tutorial-dots" aria-label="Tutorial progress"></div>
+          <div class="tutorial-actions">
+            <button id="tutorial-skip" class="ghost-button" type="button">Skip</button>
+            <div>
+              <button id="tutorial-prev" class="ghost-button" type="button">Back</button>
+              <button id="tutorial-next" class="primary-button" type="button">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="plus-screen" class="modal-layer plus-layer" role="dialog" aria-modal="true" aria-labelledby="plus-title" hidden>
+      <div class="plus-panel">
+        <header class="plus-header">
+          <div>
+            <p class="eyebrow">PREMIUM ROADMAP & PLAYABLE PREVIEW</p>
+            <h2 id="plus-title">SkyCircuit <span>Plus</span></h2>
+          </div>
+          <button id="plus-close" class="icon-button" type="button" aria-label="Close SkyCircuit Plus">×</button>
+        </header>
+
+        <section class="plus-preview">
+          <div>
+            <span class="section-label">LIVE SKIN PREVIEW</span>
+            <h3 id="active-skin-name">Classic Circuit</h3>
+          </div>
+          <div class="preview-circuit" aria-hidden="true"><i></i><b></b><em>▲</em></div>
+        </section>
+
+        <section>
+          <div class="section-heading"><span>SKINS</span><small>Tap any card to preview now</small></div>
+          <div id="skin-grid" class="skin-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-heading"><span>MODES</span><small>Zen and Blitz are playable prototypes</small></div>
+          <div id="mode-grid" class="mode-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-heading"><span>PLUS BENEFITS</span><small>Product direction</small></div>
+          <div id="benefit-grid" class="benefit-grid"></div>
+        </section>
+
+        <section>
+          <div class="section-heading"><span>ROADMAP</span><small>No purchase backend is enabled yet</small></div>
+          <div id="roadmap" class="roadmap"></div>
+        </section>
+
+        <div class="plus-footer">
+          <strong>Plus launch roadmap</strong>
+          <span>Skins and mode previews are unlocked in this prototype. Store purchase wiring comes later.</span>
+        </div>
+      </div>
+    </section>
 
     <script type="module" src="./src/main.js"></script>
   </body>
