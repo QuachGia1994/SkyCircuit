@@ -1,0 +1,27 @@
+name: Native iOS V2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'native/ios/**'
+      - '.github/workflows/native-ios-v2.yml'
+
+jobs:
+  build:
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+        working-directory: native/ios
+      - name: Build iOS 27 Simulator
+        run: xcodebuild -project SkyCircuitNative.xcodeproj -scheme SkyCircuitNative -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -configuration Debug -derivedDataPath ../../build/native-ios CODE_SIGNING_ALLOWED=NO build
+        working-directory: native/ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyCircuit-Native-iOS-V2
+          path: build/native-ios/Build/Products/Debug-iphonesimulator/SkyCircuit.app

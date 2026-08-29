@@ -10,6 +10,9 @@
 - Original SkyCircuit app-icon source and Capacitor native icon generation in Android/iOS workflows.
 - Static build pipeline and Capacitor configuration for Android and iOS packaging.
 - Behavior-level tests for board rotation, connectivity, component isolation, staged ignition, multi-source ignition, and collapse/refill.
+- Experimental Native V2 sidecars without replacing the Capacitor build: iOS SwiftUI + SpriteKit/SpriteView + CoreHaptics + AVAudioEngine + ActivityKit + StoreKit 2, and Android Jetpack Compose + SurfaceView Canvas + rich VibrationEffect + promoted Daily Run notification + Glance + Play Billing.
+- Shared Native V2 contract for Daily Run streak/rank surfaces, Plus entitlement boundaries, 120 Hz render target under 8.3 ms, and an under-25 MB procedural/vector asset budget.
+- Experimental Native V2 CI workflows for Xcode 27 and Android API 37/AGP 9.3.
 
 ### Changed
 - Completed circuits now ignite progressively through topology-ordered burn stages before rockets launch instead of lighting the whole path at once.

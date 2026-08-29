@@ -1,0 +1,64 @@
+name: SkyCircuitNative
+options:
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+targets:
+  SkyCircuitNative:
+    type: application
+    platform: iOS
+    sources:
+      - SkyCircuitNative
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skycircuit.native
+        PRODUCT_NAME: SkyCircuit
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: SkyCircuitNative/Info.plist
+      properties:
+        CFBundleDisplayName: SkyCircuit
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSSupportsLiveActivities: true
+        UIRequiresFullScreen: true
+        CADisableMinimumFrameDurationOnPhone: true
+    dependencies:
+      - target: SkyCircuitWidgets
+        embed: true
+  SkyCircuitWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - SkyCircuitWidgets
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skycircuit.native.widgets
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: SkyCircuitWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: SkyCircuit Widgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+schemes:
+  SkyCircuitNative:
+    build:
+      targets:
+        SkyCircuitNative: all
+        SkyCircuitWidgets: all
+    run:
+      config: Debug
+    test:
+      config: Debug
