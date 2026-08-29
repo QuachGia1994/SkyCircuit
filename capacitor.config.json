@@ -1,0 +1,8 @@
+{
+  "appId": "com.skycircuit.game",
+  "appName": "SkyCircuit",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

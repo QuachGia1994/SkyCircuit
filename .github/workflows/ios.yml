@@ -1,0 +1,26 @@
+name: iOS Simulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npx cap add ios
+      - run: npx cap sync ios
+      - run: xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App
+      - run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyCircuit-iOS-Simulator
+          path: build/ios/Build/Products/Debug-iphonesimulator/App.app
