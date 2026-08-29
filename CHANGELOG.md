@@ -13,4 +13,8 @@
 
 ### Changed
 - Completed circuits now ignite progressively through topology-ordered burn stages before rockets launch instead of lighting the whole path at once.
+- The ignition head now travels through each conduit curve and splits across junction branches instead of jumping between tile centers.
+- Rebuilt the gameplay art direction around the approved premium concept: cosmic skyline, luminous brand/HUD, heavy beveled board chassis, industrial tile plates, metallic curved conduits with copper couplers, mechanical spark generators, glossy vertical rockets, and premium control surfaces.
+- Plus/tutorial previews now use theme-aware rocket and ignition artwork instead of flat triangle glyphs, and page atmosphere follows the active skin.
+- Reduced mobile canvas cost by capping DPR at 2, removing per-particle blur, guarding HUD DOM writes, and adding iOS glass-filter and resize handling.
 - Cascade launches now expose an explicit combo chain in the HUD and scoring flow.

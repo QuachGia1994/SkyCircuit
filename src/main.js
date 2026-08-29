@@ -42,7 +42,7 @@ const elements = {
 }
 
 const layout = Object.freeze({ canvasWidth: 768, canvasHeight: 720, rows: 8, cols: 8, cell: 72, boardX: 96, boardY: 72, boardSize: 576 })
-const burnTiming = Object.freeze({ stageSeconds: 0.18, rocketHoldSeconds: 0.58 })
+const burnTiming = Object.freeze({ stageSeconds: 0.24, rocketHoldSeconds: 0.72 })
 const tutorialAccents = Object.freeze({ cyan: '#7be8ff', gold: '#ffd166', violet: '#c58cff' })
 const tilePool = [
   Direction.NORTH | Direction.SOUTH,
@@ -100,14 +100,18 @@ function newGame(modeKey = state?.modeKey ?? localStorage.getItem('skycircuit.mo
 }
 
 function updateHud() {
-  elements.score.textContent = String(state.score)
-  elements.combo.textContent = `×${state.combo}`
-  elements.rockets.textContent = String(state.launched)
-  elements.target.textContent = String(state.target)
-  elements.time.textContent = Number.isFinite(state.timeLeft) ? String(Math.max(0, Math.ceil(state.timeLeft))) : '∞'
-  elements.best.textContent = String(state.best)
-  elements.level.textContent = String(state.level)
-  elements.modeLabel.textContent = getMode(state.modeKey).name
+  setText(elements.score, String(state.score))
+  setText(elements.combo, `×${state.combo}`)
+  setText(elements.rockets, String(state.launched))
+  setText(elements.target, String(state.target))
+  setText(elements.time, Number.isFinite(state.timeLeft) ? String(Math.max(0, Math.ceil(state.timeLeft))) : '∞')
+  setText(elements.best, String(state.best))
+  setText(elements.level, String(state.level))
+  setText(elements.modeLabel, getMode(state.modeKey).name)
+}
+
+function setText(element, value) {
+  if (element.textContent !== value) element.textContent = value
 }
 
 function canvasPoint(event) {
@@ -358,6 +362,10 @@ function modeCardMarkup(mode, active) {
 }
 
 function handlePlusClick(event) {
+  if (event.target === elements.plusScreen) {
+    closePlusScreen()
+    return
+  }
   const skinButton = event.target.closest('[data-skin]')
   if (skinButton) {
     applySkin(skinButton.dataset.skin)
@@ -375,12 +383,19 @@ function applySkin(skinKey, persist = true) {
   document.documentElement.style.setProperty('--accent', skin.cssAccent)
   document.documentElement.style.setProperty('--accent-alt', skin.cssAccentAlt)
   document.documentElement.style.setProperty('--pink', skin.rocket)
+  document.documentElement.style.setProperty('--powered', skin.powered)
+  document.documentElement.style.setProperty('--powered-core', skin.poweredCore)
+  document.documentElement.style.setProperty('--rocket-dark', skin.rocketDark)
+  document.documentElement.style.setProperty('--page-top', skin.backgroundTop)
+  document.documentElement.style.setProperty('--page-mid', skin.cssAccentAlt)
+  document.documentElement.style.setProperty('--page-bottom', skin.backgroundBottom)
 }
 
 function render() {
   drawBackground()
-  drawSources()
+  drawBoardChassis()
   drawBoard()
+  drawSources()
   drawRockets()
   drawParticles()
 }
@@ -389,11 +404,103 @@ function drawBackground() {
   const skin = getSkin(state.skinKey)
   const gradient = context.createLinearGradient(0, 0, 0, layout.canvasHeight)
   gradient.addColorStop(0, skin.backgroundTop)
+  gradient.addColorStop(0.52, '#071226')
   gradient.addColorStop(1, skin.backgroundBottom)
   context.fillStyle = gradient
   context.fillRect(0, 0, layout.canvasWidth, layout.canvasHeight)
-  context.fillStyle = '#ffffff12'
-  for (let index = 0; index < 52; index += 1) context.fillRect((index * 137) % layout.canvasWidth, (index * 83) % layout.canvasHeight, 2, 2)
+
+  drawNebula(170, 120, 260, 'rgba(35, 105, 210, 0.24)')
+  drawNebula(610, 185, 230, 'rgba(77, 63, 175, 0.18)')
+  drawNebula(390, 650, 310, 'rgba(27, 86, 152, 0.15)')
+
+  for (let index = 0; index < 78; index += 1) {
+    const x = (index * 137 + 29) % layout.canvasWidth
+    const y = (index * 83 + 17) % layout.canvasHeight
+    const radius = 0.7 + (index % 4) * 0.28
+    context.globalAlpha = 0.35 + (index % 5) * 0.11
+    context.fillStyle = index % 7 === 0 ? '#a7ddff' : '#ffffff'
+    context.beginPath()
+    context.arc(x, y, radius, 0, Math.PI * 2)
+    context.fill()
+    if (index % 13 === 0) {
+      context.strokeStyle = '#dff6ff'
+      context.lineWidth = 0.7
+      context.beginPath()
+      context.moveTo(x - 5, y)
+      context.lineTo(x + 5, y)
+      context.moveTo(x, y - 5)
+      context.lineTo(x, y + 5)
+      context.stroke()
+    }
+  }
+  context.globalAlpha = 1
+  drawSkyTower(14, 700, 170, 38, '#0a1730')
+  drawSkyTower(61, 700, 116, 28, '#09162b')
+  drawSkyTower(706, 700, 184, 42, '#08152c')
+  drawSkyTower(666, 700, 122, 26, '#09162b')
+}
+
+function drawNebula(x, y, radius, color) {
+  const nebula = context.createRadialGradient(x, y, 0, x, y, radius)
+  nebula.addColorStop(0, color)
+  nebula.addColorStop(0.48, color.replace(/0\.(\d+)\)/, '0.08)'))
+  nebula.addColorStop(1, 'rgba(0,0,0,0)')
+  context.fillStyle = nebula
+  context.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+}
+
+function drawSkyTower(x, baseY, height, width, color) {
+  context.save()
+  context.globalAlpha = 0.82
+  context.fillStyle = color
+  context.beginPath()
+  context.moveTo(x, baseY)
+  context.lineTo(x, baseY - height + 20)
+  context.lineTo(x + width * 0.35, baseY - height + 12)
+  context.lineTo(x + width * 0.5, baseY - height)
+  context.lineTo(x + width * 0.65, baseY - height + 12)
+  context.lineTo(x + width, baseY - height + 20)
+  context.lineTo(x + width, baseY)
+  context.closePath()
+  context.fill()
+  context.fillStyle = 'rgba(89,190,255,0.55)'
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 2; col += 1) {
+      const wx = x + 8 + col * 12
+      const wy = baseY - 28 - row * 20
+      if (wy < baseY - height + 25) continue
+      context.fillRect(wx, wy, 3, 6)
+    }
+  }
+  context.restore()
+}
+
+function drawBoardChassis() {
+  const skin = getSkin(state.skinKey)
+  const metal = context.createLinearGradient(24, 38, 744, 690)
+  metal.addColorStop(0, skin.tileEdge)
+  metal.addColorStop(0.08, '#111b28')
+  metal.addColorStop(0.48, '#04080e')
+  metal.addColorStop(0.88, '#162437')
+  metal.addColorStop(1, skin.tileEdge)
+  context.fillStyle = metal
+  context.strokeStyle = '#02050a'
+  context.lineWidth = 5
+  roundRect(24, 38, 720, 646, 32)
+  context.fill()
+  context.stroke()
+
+  context.strokeStyle = 'rgba(142, 193, 235, 0.22)'
+  context.lineWidth = 2
+  roundRect(34, 48, 700, 626, 25)
+  context.stroke()
+  context.strokeStyle = 'rgba(0,0,0,0.72)'
+  context.lineWidth = 8
+  roundRect(80, 58, 608, 604, 19)
+  context.stroke()
+
+  const corners = [[40, 54], [728, 54], [40, 668], [728, 668]]
+  for (const [x, y] of corners) drawBolt(x, y, 5, skin.bolt)
 }
 
 function drawBoard() {
@@ -409,82 +516,263 @@ function drawTile(row, col, mask) {
   const key = `${row}:${col}`
   const powered = state.powered.has(key)
   const burning = state.burning.has(key)
-  context.fillStyle = skin.tile
-  context.strokeStyle = powered || burning ? skin.powered : skin.tileBorder
-  context.lineWidth = powered || burning ? 2.7 : 2
-  roundRect(x + 3, y + 3, layout.cell - 6, layout.cell - 6, 12)
+  const hot = powered || burning
+
+  const plate = context.createLinearGradient(x + 5, y + 5, x + layout.cell - 5, y + layout.cell - 5)
+  plate.addColorStop(0, skin.tileTop)
+  plate.addColorStop(0.28, skin.tile)
+  plate.addColorStop(0.72, skin.tileBottom)
+  plate.addColorStop(1, '#05080d')
+  context.fillStyle = plate
+  context.strokeStyle = hot ? skin.powered : '#05080d'
+  context.lineWidth = hot ? 2.4 : 2.2
+  roundRect(x + 3, y + 3, layout.cell - 6, layout.cell - 6, 9)
   context.fill()
   context.stroke()
+
+  context.strokeStyle = hot ? 'rgba(255,201,96,0.5)' : 'rgba(157,190,222,0.19)'
+  context.lineWidth = 1
+  roundRect(x + 7, y + 7, layout.cell - 14, layout.cell - 14, 7)
+  context.stroke()
+  context.strokeStyle = 'rgba(0,0,0,0.55)'
+  context.beginPath()
+  context.moveTo(x + 10, y + layout.cell - 8)
+  context.lineTo(x + layout.cell - 10, y + layout.cell - 8)
+  context.stroke()
+
+  drawBolt(x + 11, y + 11, 2.2, skin.bolt)
+  drawBolt(x + layout.cell - 11, y + 11, 2.2, skin.bolt)
+  drawBolt(x + 11, y + layout.cell - 11, 2.2, skin.bolt)
+  drawBolt(x + layout.cell - 11, y + layout.cell - 11, 2.2, skin.bolt)
   drawConduit(x + layout.cell / 2, y + layout.cell / 2, mask, powered, burning)
-  if (burning) drawBurnHead(x + layout.cell / 2, y + layout.cell / 2)
+  if (burning) drawBurnHead(row, col, mask, x + layout.cell / 2, y + layout.cell / 2)
 }
 
 function drawConduit(centerX, centerY, mask, powered, burning) {
   const skin = getSkin(state.skinKey)
   const reach = layout.cell / 2 - 7
+  context.save()
   context.lineCap = 'round'
-  context.lineWidth = 16
-  context.strokeStyle = '#06101d'
-  drawMaskLines(centerX, centerY, mask, reach)
-  context.lineWidth = 7
-  context.strokeStyle = skin.conduit
-  drawMaskLines(centerX, centerY, mask, reach)
-  context.fillStyle = skin.conduit
-  context.beginPath()
-  context.arc(centerX, centerY, 7, 0, Math.PI * 2)
-  context.fill()
-  if (!powered && !burning) return
+  context.lineJoin = 'round'
 
-  context.save()
-  context.globalAlpha = powered ? 1 : 0.38 + state.burn.stageProgress * 0.62
-  context.shadowBlur = powered ? 17 : 25
-  context.shadowColor = skin.powered
-  context.lineWidth = powered ? 8 : 9
-  context.strokeStyle = skin.powered
-  drawMaskLines(centerX, centerY, mask, reach)
-  context.fillStyle = skin.powered
-  context.beginPath()
-  context.arc(centerX, centerY, powered ? 8 : 9, 0, Math.PI * 2)
-  context.fill()
-  context.restore()
-}
+  context.strokeStyle = 'rgba(0,0,0,0.78)'
+  context.lineWidth = 24
+  strokeConduitShape(centerX, centerY, mask, reach)
 
-function drawBurnHead(centerX, centerY) {
-  const skin = getSkin(state.skinKey)
-  const pulse = 1 + Math.sin(performance.now() * 0.022) * 0.16
-  context.save()
-  context.shadowBlur = 30
-  context.shadowColor = skin.powered
-  context.fillStyle = '#fff7c2'
-  context.beginPath()
-  context.arc(centerX, centerY, 9 * pulse, 0, Math.PI * 2)
-  context.fill()
-  context.strokeStyle = skin.spark
-  context.lineWidth = 2
-  for (let index = 0; index < 4; index += 1) {
-    const angle = performance.now() * 0.004 + index * Math.PI / 2
-    context.beginPath()
-    context.moveTo(centerX + Math.cos(angle) * 10, centerY + Math.sin(angle) * 10)
-    context.lineTo(centerX + Math.cos(angle) * 16, centerY + Math.sin(angle) * 16)
-    context.stroke()
+  const pipe = context.createLinearGradient(centerX - reach, centerY - reach, centerX + reach, centerY + reach)
+  pipe.addColorStop(0, skin.pipeDark)
+  pipe.addColorStop(0.22, skin.pipeMid)
+  pipe.addColorStop(0.42, skin.pipeLight)
+  pipe.addColorStop(0.58, skin.pipeMid)
+  pipe.addColorStop(0.82, skin.pipeDark)
+  pipe.addColorStop(1, skin.pipeLight)
+  context.strokeStyle = pipe
+  context.lineWidth = 17
+  strokeConduitShape(centerX, centerY, mask, reach)
+
+  context.globalAlpha = 0.46
+  context.strokeStyle = '#ffffff'
+  context.lineWidth = 2.2
+  strokeConduitShape(centerX - 1.5, centerY - 1.5, mask, reach - 1)
+  context.globalAlpha = 1
+
+  context.strokeStyle = skin.copper
+  context.globalAlpha = 0.54
+  context.lineWidth = 2.4
+  strokeConduitShape(centerX, centerY, mask, reach)
+  context.globalAlpha = 1
+
+  drawCouplers(centerX, centerY, mask, reach, skin)
+  drawJunctionHub(centerX, centerY, mask, skin)
+
+  if (powered || burning) {
+    const alpha = powered ? 1 : 0.45 + state.burn.stageProgress * 0.55
+    context.globalAlpha = alpha
+    context.shadowBlur = burning ? 22 : 13
+    context.shadowColor = skin.powered
+    context.strokeStyle = skin.powered
+    context.lineWidth = burning ? 9 : 8
+    strokeConduitShape(centerX, centerY, mask, reach - 1)
+    context.shadowBlur = 8
+    context.strokeStyle = skin.poweredCore
+    context.lineWidth = 3
+    strokeConduitShape(centerX, centerY, mask, reach - 2)
+    context.globalAlpha = 1
+    context.shadowBlur = 0
   }
   context.restore()
 }
 
-function drawMaskLines(centerX, centerY, mask, reach) {
-  const ends = [
-    [Direction.NORTH, centerX, centerY - reach],
-    [Direction.EAST, centerX + reach, centerY],
-    [Direction.SOUTH, centerX, centerY + reach],
-    [Direction.WEST, centerX - reach, centerY],
-  ]
-  for (const [direction, x, y] of ends) {
-    if ((mask & direction) === 0) continue
-    context.beginPath()
+function strokeConduitShape(centerX, centerY, mask, reach) {
+  const endpoints = conduitEndpoints(centerX, centerY, mask, reach)
+  context.beginPath()
+  if (endpoints.length === 0) return
+  if (endpoints.length === 1) {
     context.moveTo(centerX, centerY)
-    context.lineTo(x, y)
+    context.lineTo(endpoints[0].x, endpoints[0].y)
+  } else if (endpoints.length === 2 && areOpposite(endpoints[0].bit, endpoints[1].bit)) {
+    context.moveTo(endpoints[0].x, endpoints[0].y)
+    context.lineTo(endpoints[1].x, endpoints[1].y)
+  } else if (endpoints.length === 2) {
+    context.moveTo(endpoints[0].x, endpoints[0].y)
+    context.quadraticCurveTo(centerX, centerY, endpoints[1].x, endpoints[1].y)
+  } else {
+    for (const endpoint of endpoints) {
+      context.moveTo(centerX, centerY)
+      context.lineTo(endpoint.x, endpoint.y)
+    }
+  }
+  context.stroke()
+}
+
+function conduitEndpoints(centerX, centerY, mask, reach) {
+  const endpoints = []
+  if ((mask & Direction.NORTH) !== 0) endpoints.push({ bit: Direction.NORTH, x: centerX, y: centerY - reach, angle: -Math.PI / 2 })
+  if ((mask & Direction.EAST) !== 0) endpoints.push({ bit: Direction.EAST, x: centerX + reach, y: centerY, angle: 0 })
+  if ((mask & Direction.SOUTH) !== 0) endpoints.push({ bit: Direction.SOUTH, x: centerX, y: centerY + reach, angle: Math.PI / 2 })
+  if ((mask & Direction.WEST) !== 0) endpoints.push({ bit: Direction.WEST, x: centerX - reach, y: centerY, angle: Math.PI })
+  return endpoints
+}
+
+function areOpposite(first, second) {
+  return (first === Direction.NORTH && second === Direction.SOUTH) || (first === Direction.SOUTH && second === Direction.NORTH) || (first === Direction.EAST && second === Direction.WEST) || (first === Direction.WEST && second === Direction.EAST)
+}
+
+function drawCouplers(centerX, centerY, mask, reach, skin) {
+  for (const endpoint of conduitEndpoints(centerX, centerY, mask, reach - 3)) {
+    context.save()
+    context.translate(endpoint.x, endpoint.y)
+    context.rotate(endpoint.angle)
+    context.fillStyle = skin.copper
+    context.strokeStyle = 'rgba(18,10,5,0.88)'
+    context.lineWidth = 1.4
+    roundRect(-5, -12, 10, 24, 3)
+    context.fill()
+    context.stroke()
+    context.fillStyle = 'rgba(255,232,187,0.48)'
+    context.fillRect(-2.7, -9, 1.4, 18)
+    context.fillStyle = 'rgba(68,35,12,0.5)'
+    context.fillRect(2.1, -9, 1.2, 18)
+    context.restore()
+  }
+}
+
+function drawJunctionHub(centerX, centerY, mask, skin) {
+  const endpoints = conduitEndpoints(centerX, centerY, mask, 1)
+  if (endpoints.length < 3) return
+  const hub = context.createRadialGradient(centerX - 3, centerY - 4, 1, centerX, centerY, 12)
+  hub.addColorStop(0, skin.pipeLight)
+  hub.addColorStop(0.45, skin.pipeMid)
+  hub.addColorStop(1, skin.pipeDark)
+  context.fillStyle = hub
+  context.strokeStyle = skin.copper
+  context.lineWidth = 2
+  context.beginPath()
+  context.arc(centerX, centerY, 10.5, 0, Math.PI * 2)
+  context.fill()
+  context.stroke()
+  context.fillStyle = '#111820'
+  context.beginPath()
+  context.arc(centerX, centerY, 3.4, 0, Math.PI * 2)
+  context.fill()
+}
+
+function drawBolt(x, y, radius, color) {
+  context.fillStyle = color
+  context.strokeStyle = 'rgba(0,0,0,0.82)'
+  context.lineWidth = 0.8
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fill()
+  context.stroke()
+  context.fillStyle = 'rgba(255,255,255,0.45)'
+  context.beginPath()
+  context.arc(x - radius * 0.28, y - radius * 0.3, Math.max(0.6, radius * 0.2), 0, Math.PI * 2)
+  context.fill()
+  context.strokeStyle = 'rgba(25,30,36,0.85)'
+  context.beginPath()
+  context.moveTo(x - radius * 0.5, y)
+  context.lineTo(x + radius * 0.5, y)
+  context.stroke()
+}
+
+function drawBurnHead(row, col, mask, centerX, centerY) {
+  const skin = getSkin(state.skinKey)
+  const positions = burnHeadPositions(row, col, mask, centerX, centerY)
+  for (const position of positions) drawBurnOrb(position.x, position.y, skin)
+}
+
+function burnHeadPositions(row, col, mask, centerX, centerY) {
+  const reach = layout.cell / 2 - 9
+  const endpoints = conduitEndpoints(centerX, centerY, mask, reach)
+  const incoming = endpoints.filter((endpoint) => burnComesFrom(row, col, endpoint.bit))
+  const outgoing = endpoints.filter((endpoint) => burnGoesTo(row, col, endpoint.bit))
+  const progress = Math.max(0, Math.min(1, state.burn?.stageProgress ?? 0))
+  const center = { x: centerX, y: centerY }
+
+  if (incoming.length === 1 && outgoing.length === 1) return [quadraticPoint(incoming[0], center, outgoing[0], progress)]
+  if (progress < 0.5 && incoming.length > 0) return incoming.map((endpoint) => lerpPoint(endpoint, center, progress * 2))
+  if (outgoing.length > 0) return outgoing.map((endpoint) => lerpPoint(center, endpoint, Math.max(0, (progress - 0.5) * 2)))
+  if (incoming.length > 0) return incoming.map((endpoint) => lerpPoint(endpoint, center, progress))
+  return [center]
+}
+
+function burnComesFrom(row, col, bit) {
+  if (bit === Direction.WEST && col === 0) return true
+  const neighbor = neighborFor(row, col, bit)
+  return neighbor ? state.powered.has(`${neighbor.row}:${neighbor.col}`) : false
+}
+
+function burnGoesTo(row, col, bit) {
+  if (bit === Direction.EAST && col === layout.cols - 1 && state.burn?.launch.rocketRows.includes(row)) return true
+  const neighbor = neighborFor(row, col, bit)
+  if (!neighbor) return false
+  const nextStage = state.burn?.launch.burnStages[(state.burn?.activeStage ?? -1) + 1] ?? []
+  return nextStage.some((cell) => cell.row === neighbor.row && cell.col === neighbor.col)
+}
+
+function neighborFor(row, col, bit) {
+  if (bit === Direction.NORTH) return row > 0 ? { row: row - 1, col } : null
+  if (bit === Direction.EAST) return col < layout.cols - 1 ? { row, col: col + 1 } : null
+  if (bit === Direction.SOUTH) return row < layout.rows - 1 ? { row: row + 1, col } : null
+  if (bit === Direction.WEST) return col > 0 ? { row, col: col - 1 } : null
+  return null
+}
+
+function quadraticPoint(start, control, end, t) {
+  const inverse = 1 - t
+  return {
+    x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+    y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y,
+  }
+}
+
+function lerpPoint(start, end, t) {
+  return { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t }
+}
+
+function drawBurnOrb(x, y, skin) {
+  const pulse = 1 + Math.sin(performance.now() * 0.02) * 0.1
+  context.save()
+  const aura = context.createRadialGradient(x, y, 1, x, y, 17 * pulse)
+  aura.addColorStop(0, '#ffffff')
+  aura.addColorStop(0.2, skin.poweredCore)
+  aura.addColorStop(0.52, skin.powered)
+  aura.addColorStop(1, 'rgba(255,120,30,0)')
+  context.fillStyle = aura
+  context.beginPath()
+  context.arc(x, y, 17 * pulse, 0, Math.PI * 2)
+  context.fill()
+  context.strokeStyle = skin.poweredCore
+  context.lineWidth = 1.7
+  for (let index = 0; index < 5; index += 1) {
+    const angle = performance.now() * 0.005 + index * Math.PI * 0.4
+    context.beginPath()
+    context.moveTo(x + Math.cos(angle) * 7, y + Math.sin(angle) * 7)
+    context.lineTo(x + Math.cos(angle) * 14, y + Math.sin(angle) * 14)
     context.stroke()
   }
+  context.restore()
 }
 
 function drawSources() {
@@ -492,14 +780,67 @@ function drawSources() {
   for (let row = 0; row < layout.rows; row += 1) {
     const y = layout.boardY + row * layout.cell + layout.cell / 2
     const hot = state.powered.has(`${row}:0`) || state.burning.has(`${row}:0`)
-    context.shadowBlur = hot ? 30 : 18
-    context.shadowColor = hot ? skin.powered : skin.spark
-    context.fillStyle = hot ? '#fff4b6' : skin.spark
+
+    context.lineCap = 'round'
+    context.strokeStyle = '#05080d'
+    context.lineWidth = 18
     context.beginPath()
-    context.arc(57, y, hot ? 11 : 9, 0, Math.PI * 2)
+    context.moveTo(71, y)
+    context.lineTo(layout.boardX + 2, y)
+    context.stroke()
+    const connector = context.createLinearGradient(71, y - 8, 71, y + 8)
+    connector.addColorStop(0, skin.pipeLight)
+    connector.addColorStop(0.45, skin.pipeMid)
+    connector.addColorStop(1, skin.pipeDark)
+    context.strokeStyle = connector
+    context.lineWidth = 11
+    context.beginPath()
+    context.moveTo(71, y)
+    context.lineTo(layout.boardX + 2, y)
+    context.stroke()
+
+    const housing = context.createRadialGradient(51, y - 6, 2, 57, y, 21)
+    housing.addColorStop(0, skin.pipeLight)
+    housing.addColorStop(0.35, skin.pipeMid)
+    housing.addColorStop(0.68, skin.pipeDark)
+    housing.addColorStop(1, '#05080d')
+    context.fillStyle = housing
+    context.strokeStyle = hot ? skin.powered : skin.copper
+    context.lineWidth = hot ? 2.8 : 1.8
+    context.beginPath()
+    context.arc(57, y, 20, 0, Math.PI * 2)
     context.fill()
+    context.stroke()
+
+    context.strokeStyle = 'rgba(185,205,225,0.35)'
+    context.lineWidth = 1
+    context.beginPath()
+    context.arc(57, y, 15, 0, Math.PI * 2)
+    context.stroke()
+    for (let index = 0; index < 6; index += 1) {
+      const angle = index * Math.PI / 3
+      drawBolt(57 + Math.cos(angle) * 16, y + Math.sin(angle) * 16, 1.8, skin.bolt)
+    }
+
+    const core = context.createRadialGradient(54, y - 3, 1, 57, y, hot ? 13 : 10)
+    core.addColorStop(0, '#ffffff')
+    core.addColorStop(0.2, skin.poweredCore)
+    core.addColorStop(0.5, hot ? skin.powered : skin.spark)
+    core.addColorStop(1, 'rgba(255,110,35,0)')
+    context.fillStyle = core
+    context.beginPath()
+    context.arc(57, y, hot ? 13 : 10, 0, Math.PI * 2)
+    context.fill()
+    context.strokeStyle = hot ? skin.poweredCore : skin.spark
+    context.lineWidth = 1.2
+    for (let ray = 0; ray < 4; ray += 1) {
+      const angle = ray * Math.PI / 2 + Math.PI / 4
+      context.beginPath()
+      context.moveTo(57 + Math.cos(angle) * 5, y + Math.sin(angle) * 5)
+      context.lineTo(57 + Math.cos(angle) * 11, y + Math.sin(angle) * 11)
+      context.stroke()
+    }
   }
-  context.shadowBlur = 0
 }
 
 function drawRockets() {
@@ -507,39 +848,128 @@ function drawRockets() {
   for (let row = 0; row < layout.rows; row += 1) {
     const y = layout.boardY + row * layout.cell + layout.cell / 2
     const launching = state.launchingRows.has(row)
-    const launchProgress = launching ? Math.min(1, state.burn?.hold / 0.34 ?? 0) : 0
-    const offset = launchProgress * 28
-    context.save()
-    context.translate(707 + offset, y)
-    context.fillStyle = launching ? skin.powered : skin.rocket
+    const hot = launching || state.powered.has(`${row}:${layout.cols - 1}`)
+    const launchProgress = launching ? Math.min(1, state.burn?.hold / 0.42 ?? 0) : 0
+
+    context.lineCap = 'round'
+    context.strokeStyle = '#05080d'
+    context.lineWidth = 19
     context.beginPath()
-    context.moveTo(25, 0)
-    context.lineTo(2, -12)
-    context.lineTo(-18, -10)
-    context.lineTo(-12, 0)
-    context.lineTo(-18, 10)
-    context.lineTo(2, 12)
+    context.moveTo(layout.boardX + layout.boardSize - 2, y)
+    context.lineTo(694, y)
+    context.stroke()
+    const feed = context.createLinearGradient(674, y - 8, 674, y + 8)
+    feed.addColorStop(0, skin.pipeLight)
+    feed.addColorStop(0.48, skin.pipeMid)
+    feed.addColorStop(1, skin.pipeDark)
+    context.strokeStyle = feed
+    context.lineWidth = 11
+    context.beginPath()
+    context.moveTo(layout.boardX + layout.boardSize - 2, y)
+    context.lineTo(694, y)
+    context.stroke()
+
+    const socket = context.createRadialGradient(688, y - 5, 1, 692, y, 19)
+    socket.addColorStop(0, skin.pipeLight)
+    socket.addColorStop(0.42, skin.pipeMid)
+    socket.addColorStop(0.75, skin.pipeDark)
+    socket.addColorStop(1, '#05080d')
+    context.fillStyle = socket
+    context.strokeStyle = hot ? skin.powered : skin.copper
+    context.lineWidth = hot ? 2.8 : 1.8
+    context.beginPath()
+    context.arc(692, y, 18, 0, Math.PI * 2)
+    context.fill()
+    context.stroke()
+    context.fillStyle = hot ? skin.powered : '#0e151e'
+    context.beginPath()
+    context.arc(692, y, 7, 0, Math.PI * 2)
+    context.fill()
+
+    context.save()
+    context.translate(718, y - launchProgress * 27)
+    if (launching) drawRocketFlame(launchProgress, skin)
+
+    const hull = context.createLinearGradient(-14, 0, 14, 0)
+    hull.addColorStop(0, skin.rocketDark)
+    hull.addColorStop(0.24, skin.rocket)
+    hull.addColorStop(0.5, skin.rocketLight)
+    hull.addColorStop(0.72, skin.rocket)
+    hull.addColorStop(1, skin.rocketDark)
+    context.fillStyle = hull
+    context.strokeStyle = skin.rocketDark
+    context.lineWidth = 1.3
+    context.beginPath()
+    context.moveTo(0, -30)
+    context.bezierCurveTo(10, -23, 13, -7, 12, 9)
+    context.lineTo(8, 21)
+    context.lineTo(-8, 21)
+    context.lineTo(-12, 9)
+    context.bezierCurveTo(-13, -7, -10, -23, 0, -30)
     context.closePath()
     context.fill()
-    context.fillStyle = '#f6f3ff'
+    context.stroke()
+
+    context.fillStyle = skin.rocketDark
     context.beginPath()
-    context.arc(1, 0, 4, 0, Math.PI * 2)
+    context.moveTo(-9, 9)
+    context.lineTo(-18, 22)
+    context.lineTo(-8, 18)
+    context.closePath()
     context.fill()
-    if (launching) drawRocketFlame(launchProgress, skin)
+    context.beginPath()
+    context.moveTo(9, 9)
+    context.lineTo(18, 22)
+    context.lineTo(8, 18)
+    context.closePath()
+    context.fill()
+
+    const windowGlow = context.createRadialGradient(-2, -9, 1, 0, -8, 7)
+    windowGlow.addColorStop(0, '#e9ffff')
+    windowGlow.addColorStop(0.35, skin.glass)
+    windowGlow.addColorStop(1, '#0c5f91')
+    context.fillStyle = windowGlow
+    context.strokeStyle = '#d6f6ff'
+    context.lineWidth = 1.1
+    context.beginPath()
+    context.arc(0, -8, 6, 0, Math.PI * 2)
+    context.fill()
+    context.stroke()
+    context.fillStyle = 'rgba(255,255,255,0.55)'
+    context.beginPath()
+    context.ellipse(-2, -10, 1.8, 1.2, -0.5, 0, Math.PI * 2)
+    context.fill()
+
+    context.fillStyle = '#252b35'
+    context.strokeStyle = skin.copper
+    context.lineWidth = 1.2
+    roundRect(-7, 18, 14, 6, 2)
+    context.fill()
+    context.stroke()
     context.restore()
   }
 }
 
 function drawRocketFlame(progress, skin) {
   context.save()
-  context.globalAlpha = 0.55 + progress * 0.45
-  context.fillStyle = skin.spark
-  context.shadowBlur = 22
-  context.shadowColor = skin.powered
+  context.globalAlpha = 0.72 + progress * 0.28
+  const outer = context.createLinearGradient(0, 21, 0, 49 + progress * 14)
+  outer.addColorStop(0, '#fff5b2')
+  outer.addColorStop(0.35, skin.powered)
+  outer.addColorStop(0.75, skin.spark)
+  outer.addColorStop(1, 'rgba(255,70,110,0)')
+  context.fillStyle = outer
   context.beginPath()
-  context.moveTo(-12, -6)
-  context.lineTo(-28 - progress * 13, 0)
-  context.lineTo(-12, 6)
+  context.moveTo(-7, 22)
+  context.quadraticCurveTo(-11, 34, 0, 50 + progress * 13)
+  context.quadraticCurveTo(11, 34, 7, 22)
+  context.closePath()
+  context.fill()
+  context.fillStyle = '#fff8dc'
+  context.beginPath()
+  context.moveTo(-3, 23)
+  context.quadraticCurveTo(-5, 31, 0, 40 + progress * 8)
+  context.quadraticCurveTo(5, 31, 3, 23)
   context.closePath()
   context.fill()
   context.restore()
@@ -580,16 +1010,18 @@ function updateParticles(deltaSeconds) {
 
 function drawParticles() {
   for (const particle of particles) {
-    context.save()
-    context.globalAlpha = Math.max(0, 1 - particle.age / particle.life)
+    const alpha = Math.max(0, 1 - particle.age / particle.life)
+    context.globalAlpha = alpha
     context.fillStyle = particle.color
-    context.shadowBlur = 10
-    context.shadowColor = particle.color
     context.beginPath()
     context.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2)
     context.fill()
-    context.restore()
+    context.globalAlpha = alpha * 0.4
+    context.beginPath()
+    context.arc(particle.x, particle.y, particle.size * 2.1, 0, Math.PI * 2)
+    context.fill()
   }
+  context.globalAlpha = 1
 }
 
 function stageSet(stages, count) {
@@ -604,7 +1036,21 @@ function cellSet(cells) {
 
 function roundRect(x, y, width, height, radius) {
   context.beginPath()
-  context.roundRect(x, y, width, height, radius)
+  if (typeof context.roundRect === 'function') {
+    context.roundRect(x, y, width, height, radius)
+    return
+  }
+  const safeRadius = Math.max(0, Math.min(radius, width / 2, height / 2))
+  context.moveTo(x + safeRadius, y)
+  context.lineTo(x + width - safeRadius, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+  context.lineTo(x + width, y + height - safeRadius)
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+  context.lineTo(x + safeRadius, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+  context.lineTo(x, y + safeRadius)
+  context.quadraticCurveTo(x, y, x + safeRadius, y)
+  context.closePath()
 }
 
 function ensureAudio() {
@@ -650,7 +1096,7 @@ function frame(now) {
 }
 
 function configureCanvasResolution() {
-  const ratio = Math.min(3, window.devicePixelRatio || 1)
+  const ratio = Math.min(2, window.devicePixelRatio || 1)
   canvas.width = Math.round(layout.canvasWidth * ratio)
   canvas.height = Math.round(layout.canvasHeight * ratio)
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -666,7 +1112,7 @@ elements.tutorialPrev.addEventListener('click', previousTutorialStep)
 elements.tutorialNext.addEventListener('click', nextTutorialStep)
 elements.plusClose.addEventListener('click', closePlusScreen)
 elements.plusScreen.addEventListener('click', handlePlusClick)
-elements.plusScreen.addEventListener('pointerdown', (event) => { if (event.target === elements.plusScreen) closePlusScreen() })
+window.addEventListener('resize', configureCanvasResolution)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state && !state.gameOver && !state.paused && !state.resolving && !state.uiPaused) togglePause()
 })
