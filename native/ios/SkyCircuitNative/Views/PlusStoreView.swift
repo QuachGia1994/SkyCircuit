@@ -131,10 +131,10 @@ struct PlusStoreView: View {
                 accent: chrome.gold
             )
             VStack(spacing: 10) {
-                PlusBenefitCard(symbol: "nosign", title: "no_ads", body: "no_ads_body", language: engine.language, accent: chrome.cyan)
-                PlusBenefitCard(symbol: "paintpalette.fill", title: "exclusive_skins", body: "exclusive_skins_body", language: engine.language, accent: chrome.cyan)
-                PlusBenefitCard(symbol: "bolt.fill", title: "early_modes", body: "early_modes_body", language: engine.language, accent: chrome.gold)
-                PlusBenefitCard(symbol: "calendar.badge.clock", title: "daily_streak", body: "daily_streak_body", language: engine.language, accent: chrome.gold)
+                PlusBenefitCard(symbol: "nosign", title: "no_ads", bodyKey: "no_ads_body", language: engine.language, accent: chrome.cyan)
+                PlusBenefitCard(symbol: "paintpalette.fill", title: "exclusive_skins", bodyKey: "exclusive_skins_body", language: engine.language, accent: chrome.cyan)
+                PlusBenefitCard(symbol: "bolt.fill", title: "early_modes", bodyKey: "early_modes_body", language: engine.language, accent: chrome.gold)
+                PlusBenefitCard(symbol: "calendar.badge.clock", title: "daily_streak", bodyKey: "daily_streak_body", language: engine.language, accent: chrome.gold)
             }
         }
     }
@@ -333,7 +333,7 @@ private struct PlusModeCard: View {
 private struct PlusBenefitCard: View {
     let symbol: String
     let title: String
-    let body: String
+    let bodyKey: String
     let language: AppLanguage
     let accent: Color
 
@@ -353,7 +353,7 @@ private struct PlusBenefitCard: View {
                 Text(L10n.text(title, language: language))
                     .font(.headline.weight(.black))
                     .foregroundStyle(.white)
-                Text(L10n.text(body, language: language))
+                Text(L10n.text(bodyKey, language: language))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.white.opacity(0.58))
                     .fixedSize(horizontal: false, vertical: true)
