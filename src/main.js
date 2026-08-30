@@ -1380,16 +1380,20 @@ function makeAmbientBuffer(audio) {
     const pad = Math.sin(2 * Math.PI * root * time)
       + 0.48 * Math.sin(2 * Math.PI * root * 1.5 * time + 0.7)
       + 0.24 * Math.sin(2 * Math.PI * root * 2 * time + 1.4)
-    const shimmer = 0.15 * Math.sin(2 * Math.PI * 0.19 * time) * Math.sin(2 * Math.PI * root * 4 * time)
-    channel[frame] = (pad * 0.068 + shimmer * 0.030) * breath
+    const presence = 0.34 * Math.sin(2 * Math.PI * root * 4 * time + 0.3)
+      + 0.22 * Math.sin(2 * Math.PI * root * 6 * time + 1.1)
+      + 0.12 * Math.sin(2 * Math.PI * root * 9 * time + 2)
+    const shimmer = 0.15 * Math.sin(2 * Math.PI * 0.19 * time) * Math.sin(2 * Math.PI * root * 8 * time)
+    const mixed = (pad * 0.060 + presence * 0.16 + shimmer * 0.034) * breath
+    channel[frame] = Math.tanh(mixed * 1.35)
   }
   return buffer
 }
 
 function setAmbientEnergy(combo, igniting) {
   if (!audioContext || !ambientGain) return
-  const comboLift = Math.min(combo, 8) * 0.02
-  const target = state.musicEnabled ? Math.min(0.88, 0.62 + comboLift + (igniting ? 0.10 : 0)) : 0
+  const comboLift = Math.min(combo, 8) * 0.018
+  const target = state.musicEnabled ? Math.min(0.96, 0.76 + comboLift + (igniting ? 0.08 : 0)) : 0
   ambientGain.gain.cancelScheduledValues(audioContext.currentTime)
   ambientGain.gain.linearRampToValueAtTime(target, audioContext.currentTime + 0.28)
 }
@@ -1419,10 +1423,28 @@ function playLaunchSound(combo) {
 
 function playFireworkSound(count) {
   ensureAudio()
-  const lift = Math.min(count, 4) * 26
-  for (const frequency of [659.25 + lift, 783.99 + lift, 1046.5 + lift]) {
-    playTone(frequency, 0.32, 'sine', 0.035)
+  if (!audioContext || !state.effectsEnabled) return
+  const duration = 0.46
+  const frameCount = Math.floor(audioContext.sampleRate * duration)
+  const buffer = audioContext.createBuffer(1, frameCount, audioContext.sampleRate)
+  const channel = buffer.getChannelData(0)
+  const lift = Math.min(count, 4) * 32
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const time = frame / audioContext.sampleRate
+    const pseudo = Math.sin(frame * 12.9898 + 78.233) * 43758.5453
+    const white = (pseudo - Math.floor(pseudo)) * 2 - 1
+    const crack = white * Math.exp(-time * 24)
+    const boom = Math.sin(2 * Math.PI * (190 + lift * 0.15) * time) * Math.exp(-time * 8)
+    const sparkle = (Math.sin(2 * Math.PI * (1450 + lift) * time) + Math.sin(2 * Math.PI * (2350 + lift) * time)) * 0.5 * Math.exp(-time * 5.5)
+    const tail = white * 0.22 * Math.exp(-time * 6.5)
+    channel[frame] = Math.tanh((crack * 0.54 + boom * 0.24 + sparkle * 0.30 + tail) * 1.2)
   }
+  const source = audioContext.createBufferSource()
+  const gain = audioContext.createGain()
+  source.buffer = buffer
+  gain.gain.value = 0.72
+  source.connect(gain).connect(audioContext.destination)
+  source.start()
 }
 
 function vibrate(duration) {

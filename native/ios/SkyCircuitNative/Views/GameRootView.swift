@@ -150,8 +150,30 @@ struct GameRootView: View {
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .stroke(boardStroke, lineWidth: 1.2)
             )
+            .overlay { if engine.phase == .paused { pausedBoardOverlay } }
             .shadow(color: .black.opacity(0.55), radius: 24, y: 14)
             .shadow(color: chrome.cyan.opacity(0.08), radius: 18)
+    }
+
+    private var pausedBoardOverlay: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.black.opacity(0.86))
+            VStack(spacing: 8) {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 28, weight: .black))
+                    .foregroundStyle(chrome.cyan)
+                Text(L10n.text("pause", language: engine.language))
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(.white)
+                Text(L10n.text("status_paused", language: engine.language))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+        }
+        .padding(5)
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
 
     private var statusCard: some View {

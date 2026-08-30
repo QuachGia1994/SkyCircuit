@@ -24,6 +24,7 @@ final class ProceduralAudioEngine {
     func activate() {
         do {
             try configureSession()
+            engine.mainMixerNode.outputVolume = 1.0
             if !engine.isRunning { try engine.start() }
             if !effectsPlayer.isPlaying { effectsPlayer.play() }
             if !musicPlayer.isPlaying { musicPlayer.play() }
@@ -40,13 +41,13 @@ final class ProceduralAudioEngine {
     func setMusicEnabled(_ enabled: Bool) {
         musicEnabled = enabled
         if enabled { activate() }
-        musicPlayer.volume = enabled ? 0.64 : 0
+        musicPlayer.volume = enabled ? 0.78 : 0
     }
 
     func setMusicEnergy(combo: Int, igniting: Bool) {
         guard musicEnabled else { return }
-        let comboLift = Float(min(combo, 8)) * 0.02
-        musicPlayer.volume = min(0.88, 0.62 + comboLift + (igniting ? 0.10 : 0))
+        let comboLift = Float(min(combo, 8)) * 0.018
+        musicPlayer.volume = min(0.96, 0.76 + comboLift + (igniting ? 0.08 : 0))
     }
 
     func playPlacement(quality: Double) {
@@ -63,8 +64,7 @@ final class ProceduralAudioEngine {
 
     func playFireworkBurst(rocketCount: Int) {
         guard effectsEnabled else { return }
-        let lift = Double(min(rocketCount, 4)) * 26
-        scheduleChord(frequencies: [659.25 + lift, 783.99 + lift, 1046.50 + lift], duration: 0.32, amplitude: 0.16)
+        scheduleFireworkBlast(rocketCount: rocketCount)
     }
 
     private func prepare() {
@@ -89,7 +89,7 @@ final class ProceduralAudioEngine {
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
             throw AudioFailure.sessionConfigurationFailed(error.localizedDescription)
@@ -107,7 +107,7 @@ final class ProceduralAudioEngine {
         guard let buffer = makeMusicBuffer(format: format) else {
             throw AudioFailure.musicBufferUnavailable
         }
-        musicPlayer.volume = 0.64
+        musicPlayer.volume = 0.78
         musicPlayer.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
         musicPlayer.play()
     }
@@ -131,8 +131,12 @@ final class ProceduralAudioEngine {
             let pad = sin(2 * .pi * root * time)
                 + 0.48 * sin(2 * .pi * root * 1.5 * time + 0.7)
                 + 0.24 * sin(2 * .pi * root * 2.0 * time + 1.4)
-            let shimmer = 0.15 * sin(2 * .pi * 0.19 * time) * sin(2 * .pi * root * 4 * time)
-            channel[frame] = Float((pad * 0.068 + shimmer * 0.030) * breath)
+            let presence = 0.34 * sin(2 * .pi * root * 4.0 * time + 0.3)
+                + 0.22 * sin(2 * .pi * root * 6.0 * time + 1.1)
+                + 0.12 * sin(2 * .pi * root * 9.0 * time + 2.0)
+            let shimmer = 0.15 * sin(2 * .pi * 0.19 * time) * sin(2 * .pi * root * 8.0 * time)
+            let mixed = (pad * 0.060 + presence * 0.16 + shimmer * 0.034) * breath
+            channel[frame] = Float(tanh(mixed * 1.35))
         }
     }
 
@@ -146,17 +150,24 @@ final class ProceduralAudioEngine {
         effectsPlayer.scheduleBuffer(buffer, completionHandler: nil)
     }
 
-    private func scheduleChord(frequencies: [Double], duration: Double, amplitude: Float) {
+    private func scheduleFireworkBlast(rocketCount: Int) {
         guard let format else { return }
+        let duration = 0.46
         let frameCount = AVAudioFrameCount(format.sampleRate * duration)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
         buffer.frameLength = frameCount
         guard let channel = buffer.floatChannelData?[0] else { return }
+        let lift = Double(min(rocketCount, 4)) * 32
         for frame in 0..<Int(frameCount) {
             let time = Double(frame) / format.sampleRate
-            let envelope = min(1, time / 0.012) * max(0, 1 - time / duration)
-            let sample = frequencies.reduce(0.0) { $0 + sin(2 * .pi * $1 * time) } / Double(max(1, frequencies.count))
-            channel[frame] = Float(sample) * amplitude * Float(envelope)
+            let pseudo = sin(Double(frame) * 12.9898 + 78.233) * 43_758.5453
+            let white = (pseudo - floor(pseudo)) * 2 - 1
+            let crack = white * exp(-time * 24)
+            let boom = sin(2 * .pi * (190 + lift * 0.15) * time) * exp(-time * 8)
+            let sparkle = (sin(2 * .pi * (1_450 + lift) * time) + sin(2 * .pi * (2_350 + lift) * time)) * 0.5 * exp(-time * 5.5)
+            let tail = white * 0.22 * exp(-time * 6.5)
+            let sample = crack * 0.54 + boom * 0.24 + sparkle * 0.30 + tail
+            channel[frame] = Float(tanh(sample * 1.2))
         }
         effectsPlayer.scheduleBuffer(buffer, completionHandler: nil)
     }

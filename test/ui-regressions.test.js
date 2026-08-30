@@ -67,7 +67,7 @@ test('Android and iOS share launch timing and cinematic phases', async () => {
   assert.match(iosRoot, /Task\.sleep\(for: \.seconds\(4\.0\)\)/)
 })
 
-test('Android bootstrap mirrors iOS ambient audio activation, progression, and louder music mix', async () => {
+test('Android and iOS use a phone-audible music presence band and firework blast', async () => {
   const [webSource, iosRoot, iosAudio] = await Promise.all([
     text('src/main.js'),
     text('native/ios/SkyCircuitNative/Views/GameRootView.swift'),
@@ -76,12 +76,19 @@ test('Android bootstrap mirrors iOS ambient audio activation, progression, and l
 
   assert.match(webSource, /bootstrapAmbientAudio\(\)/)
   assert.match(webSource, /pointerdown', bootstrapAmbientAudio/)
-  assert.match(webSource, /const roots = \[110, 130\.81, 146\.83, 98\]/)
-  assert.match(iosAudio, /let roots = \[110\.0, 130\.81, 146\.83, 98\.0\]/)
-  assert.match(webSource, /659\.25 \+ lift, 783\.99 \+ lift, 1046\.5 \+ lift/)
-  assert.match(iosAudio, /659\.25 \+ lift, 783\.99 \+ lift, 1046\.50 \+ lift/)
-  assert.match(webSource, /Math\.min\(0\.88, 0\.62 \+ comboLift \+ \(igniting \? 0\.10 : 0\)\)/)
-  assert.match(iosAudio, /min\(0\.88, 0\.62 \+ comboLift \+ \(igniting \? 0\.10 : 0\)\)/)
+  assert.match(webSource, /root \* 4/)
+  assert.match(webSource, /root \* 6/)
+  assert.match(webSource, /root \* 9/)
+  assert.match(iosAudio, /root \* 4\.0/)
+  assert.match(iosAudio, /root \* 6\.0/)
+  assert.match(iosAudio, /root \* 9\.0/)
+  assert.match(webSource, /Math\.min\(0\.96, 0\.76 \+ comboLift \+ \(igniting \? 0\.08 : 0\)\)/)
+  assert.match(iosAudio, /min\(0\.96, 0\.76 \+ comboLift \+ \(igniting \? 0\.08 : 0\)\)/)
+  assert.match(webSource, /1450 \+ lift/)
+  assert.match(webSource, /2350 \+ lift/)
+  assert.match(iosAudio, /1_450 \+ lift/)
+  assert.match(iosAudio, /2_350 \+ lift/)
+  assert.match(iosAudio, /mainMixerNode\.outputVolume = 1\.0/)
   assert.match(iosRoot, /engine\.activateAudio\(\)/)
 })
 
@@ -92,6 +99,15 @@ test('iOS play header keeps the title and mode labels single-line on compact pho
   assert.match(iosRoot, /Text\("SkyCircuit"\)[\s\S]*?\.layoutPriority\(1\)/)
   assert.match(iosRoot, /engine\.mode\.title[\s\S]*?\.lineLimit\(1\)/)
   assert.match(iosRoot, /L10n\.text\("daily"[\s\S]*?\.lineLimit\(1\)/)
+})
+
+test('iOS pause mirrors Android by darkening the board', async () => {
+  const iosRoot = await text('native/ios/SkyCircuitNative/Views/GameRootView.swift')
+
+  assert.match(iosRoot, /engine\.phase == \.paused/)
+  assert.match(iosRoot, /pausedBoardOverlay/)
+  assert.match(iosRoot, /\.fill\(\.black\.opacity\(0\.86\)\)/)
+  assert.match(iosRoot, /status_paused/)
 })
 
 test('Android and iOS expose the same six launch languages', async () => {
