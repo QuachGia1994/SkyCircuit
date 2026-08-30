@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.skycircuit.nativev2"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.skycircuit.nativev2"
