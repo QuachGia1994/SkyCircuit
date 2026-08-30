@@ -24,3 +24,4 @@
 - Cascade launches now expose an explicit combo chain in the HUD and scoring flow.
 - Native iOS rocket resolution now pairs each left source row to its matching right rocket row; one completed route launches one paired rocket, while multiple independently completed rows may still multi-launch.
 - Android CI now emits both a true release unsigned beta APK for archive/re-sign and a debug-signed installable beta APK for direct device testing; CI verifies the installable APK signature with `apksigner`. Native Android V2 remains pinned to Compose 1.11/BOM 2026.04.01 on stable Android API 36.
+- Android startup now has native Capacitor splash integration plus an in-web branded SkyCircuit handoff; Plus skin previews own proper clipping boxes on WebView, and heavy Canvas/background repaint work is suspended while modal UI is open to reduce scroll jank.

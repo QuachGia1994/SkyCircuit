@@ -21,8 +21,18 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx cap add android
-      - run: npx capacitor-assets generate --android
+      - name: Remove Capacitor placeholder splash assets
+        shell: bash
+        run: find android/app/src/main/res -type f -name 'splash*.png' -delete
+      - name: Generate branded Android icon and splash assets
+        run: npx capacitor-assets generate --android --iconBackgroundColor '#07111f' --iconBackgroundColorDark '#020714' --splashBackgroundColor '#07111f' --splashBackgroundColorDark '#020714'
       - run: npx cap sync android
+      - name: Verify Android splash integration
+        shell: bash
+        run: |
+          find android/app/src/main/res -type f -name 'splash*.png' | grep -q .
+          grep -R -q 'Theme.SplashScreen' android/app/src/main/res/values*
+          grep -q 'SplashScreen' android/app/src/main/assets/capacitor.plugins.json
       - run: chmod +x android/gradlew
       - name: Build Android beta packages
         run: ./gradlew assembleRelease assembleDebug

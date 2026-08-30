@@ -39,6 +39,7 @@ const elements = {
   modeGrid: document.querySelector('#mode-grid'),
   benefitGrid: document.querySelector('#benefit-grid'),
   roadmap: document.querySelector('#roadmap'),
+  startupSplash: document.querySelector('#startup-splash'),
 }
 
 const layout = Object.freeze({ canvasWidth: 768, canvasHeight: 720, rows: 8, cols: 8, cell: 72, boardX: 96, boardY: 72, boardSize: 576 })
@@ -59,6 +60,7 @@ let state
 let lastFrame = performance.now()
 let audioContext = null
 const particles = []
+const startupShownAt = performance.now()
 
 function createState(modeKey = localStorage.getItem('skycircuit.mode') ?? 'classic') {
   const mode = getMode(modeKey)
@@ -277,6 +279,16 @@ function hideBurnBanner() {
   elements.burnBanner.hidden = true
 }
 
+function dismissStartupSplash() {
+  const elapsed = performance.now() - startupShownAt
+  const delay = Math.max(0, 720 - elapsed)
+  setTimeout(() => {
+    if (elements.startupSplash.hidden) return
+    elements.startupSplash.classList.add('is-hiding')
+    setTimeout(() => { elements.startupSplash.hidden = true }, 300)
+  }, delay)
+}
+
 function openTutorial(step = 0) {
   if (state.resolving) {
     elements.status.textContent = 'Watch the ignition finish before opening the tutorial.'
@@ -339,15 +351,24 @@ function closePlusScreen() {
 
 function syncUiPause() {
   state.uiPaused = !elements.tutorial.hidden || !elements.plusScreen.hidden
+  document.body.classList.toggle('modal-open', state.uiPaused)
 }
 
 function renderPlusScreen() {
+  renderSkinSelection()
+  elements.modeGrid.innerHTML = modeList.map((mode) => modeCardMarkup(mode, mode.key === state.modeKey)).join('')
+  if (elements.benefitGrid.childElementCount === 0) {
+    elements.benefitGrid.innerHTML = plusBenefits.map((benefit) => `<article class="benefit-card"><span class="benefit-icon">${benefit.icon}</span><div><strong>${benefit.title}</strong><p>${benefit.body}</p></div></article>`).join('')
+  }
+  if (elements.roadmap.childElementCount === 0) {
+    elements.roadmap.innerHTML = plusRoadmap.map((item) => `<span class="roadmap-item"><b>${item.label}</b><span>${item.status}</span></span>`).join('')
+  }
+}
+
+function renderSkinSelection() {
   const activeSkin = getSkin(state.skinKey)
   elements.activeSkinName.textContent = activeSkin.name
   elements.skinGrid.innerHTML = skinList.map((skin) => skinCardMarkup(skin, skin.key === activeSkin.key)).join('')
-  elements.modeGrid.innerHTML = modeList.map((mode) => modeCardMarkup(mode, mode.key === state.modeKey)).join('')
-  elements.benefitGrid.innerHTML = plusBenefits.map((benefit) => `<article class="benefit-card"><span class="benefit-icon">${benefit.icon}</span><div><strong>${benefit.title}</strong><p>${benefit.body}</p></div></article>`).join('')
-  elements.roadmap.innerHTML = plusRoadmap.map((item) => `<span class="roadmap-item"><b>${item.label}</b><span>${item.status}</span></span>`).join('')
 }
 
 function skinCardMarkup(skin, active) {
@@ -369,7 +390,7 @@ function handlePlusClick(event) {
   const skinButton = event.target.closest('[data-skin]')
   if (skinButton) {
     applySkin(skinButton.dataset.skin)
-    renderPlusScreen()
+    renderSkinSelection()
     return
   }
   const modeButton = event.target.closest('[data-mode]')
@@ -1084,8 +1105,12 @@ function vibrate(duration) {
 function frame(now) {
   const deltaSeconds = Math.min(0.05, (now - lastFrame) / 1000)
   lastFrame = now
-  if (state.resolving && !state.uiPaused) updateBurn(deltaSeconds)
-  if (!state.paused && !state.uiPaused && !state.gameOver && !state.resolving && Number.isFinite(state.timeLeft)) {
+  if (state.uiPaused) {
+    requestAnimationFrame(frame)
+    return
+  }
+  if (state.resolving) updateBurn(deltaSeconds)
+  if (!state.paused && !state.gameOver && !state.resolving && Number.isFinite(state.timeLeft)) {
     state.timeLeft -= deltaSeconds
     if (state.timeLeft <= 0) endGame()
   }
@@ -1125,4 +1150,6 @@ document.addEventListener('keydown', (event) => {
 
 configureCanvasResolution()
 newGame()
+render()
+requestAnimationFrame(() => requestAnimationFrame(dismissStartupSplash))
 requestAnimationFrame(frame)
