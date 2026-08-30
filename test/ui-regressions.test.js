@@ -109,6 +109,32 @@ test('iOS pause mirrors Android by darkening the board', async () => {
   assert.match(iosRoot, /status_paused/)
 })
 
+test('iOS Plus mirrors Android mobile hierarchy and roadmap', async () => {
+  const plus = await text('native/ios/SkyCircuitNative/Views/PlusStoreView.swift')
+
+  for (const marker of ['livePreview', 'skinSection', 'modeSection', 'benefitSection', 'roadmapSection', 'roadmapFooter', 'purchaseSection']) {
+    assert.match(plus, new RegExp(marker))
+  }
+  assert.match(plus, /skinColumns = \[GridItem\(\.flexible\(\)\), GridItem\(\.flexible\(\)\)\]/)
+  assert.match(plus, /VStack\(spacing: 10\) \{\s*ForEach\(GameMode\.allCases\)/)
+  assert.match(plus, /FlowLayout\(spacing: 8\)/)
+  for (const key of ['plus_skins', 'zen_blitz', 'daily_challenge', 'weekly_events', 'leaderboards', 'seasonal_themes']) {
+    assert.match(plus, new RegExp(key))
+  }
+  assert.match(plus, /engine\.store\.isBetaUnlocked/)
+  assert.match(plus, /ProductView\(id: product\.id\)/)
+})
+
+test('all iOS launch languages carry Plus roadmap localization keys', async () => {
+  const files = ['en', 'vi', 'ja', 'ko', 'zh-Hans', 'fr'].map((language) => `native/ios/SkyCircuitNative/${language}.lproj/Localizable.strings`)
+  const resources = await Promise.all(files.map(text))
+  const keys = ['plus_eyebrow', 'live_skin_preview', 'skins', 'roadmap', 'plus_footer_title', 'plus_skins', 'weekly_events', 'leaderboards', 'seasonal_themes']
+
+  for (const resource of resources) {
+    for (const key of keys) assert.match(resource, new RegExp(`"${key}"\\s*=`))
+  }
+})
+
 test('Android and iOS expose the same six launch languages', async () => {
   const [webI18n, iosI18n] = await Promise.all([
     text('src/data/i18n.js'),

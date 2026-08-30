@@ -411,7 +411,7 @@ struct GameControlStyle: ButtonStyle {
 }
 
 @MainActor
-struct PlusStoreView: View {
+struct LegacyPlusStoreView: View {
     @Bindable var engine: GameEngine
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
