@@ -1,370 +1,599 @@
-import SpriteKit
+import SwiftUI
 
 @MainActor
-final class GameScene: SKScene {
-    var onRotationQuality: (@MainActor (Double) -> Void)?
-    var onLaunch: (@MainActor () -> Void)?
+struct CircuitBoardView: View {
+    @Bindable var engine: GameEngine
 
-    private enum PipeKind: Int {
-        case elbow
-        case straight
-        case tee
-        case cross
-    }
-
-    private let columns = 8
-    private let rows = 8
-    private var tiles: [SKShapeNode] = []
-
-    override func didMove(to view: SKView) {
-        scaleMode = .resizeFill
-        backgroundColor = .clear
-        view.allowsTransparency = true
-        buildBoard()
-    }
-
-    override func didChangeSize(_ oldSize: CGSize) {
-        guard oldSize != .zero else { return }
-        buildBoard()
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let point = touches.first?.location(in: self) else { return }
-        let hitNodes = nodes(at: point)
-        guard let tile = hitNodes.compactMap({ tileAncestor(from: $0) }).first else { return }
-
-        let newRotation = tile.zRotation - .pi / 2
-        tile.run(.rotate(toAngle: newRotation, duration: 0.11))
-
-        let targetQuarter = tile.userData?["target"] as? Int ?? 0
-        let currentQuarter = normalizedQuarter(newRotation)
-        let delta = abs(currentQuarter - targetQuarter)
-        let wrapped = min(delta, 4 - delta)
-        let quality: Double = switch wrapped {
-        case 0: 1
-        case 1: 0.62
-        default: 0.2
-        }
-
-        onRotationQuality?(quality)
-        updateEnergy(on: tile, quality: quality)
-
-        if quality > 0.92 {
-            tile.run(.sequence([
-                .scale(to: 1.045, duration: 0.055),
-                .scale(to: 1.0, duration: 0.08),
-            ]))
-
-            let row = tile.userData?["row"] as? Int ?? 0
-            let column = tile.userData?["column"] as? Int ?? 0
-            if (row + column) % 5 == 0 {
-                playIgnitionPulse(from: tile)
-                onLaunch?()
-            }
-        }
-    }
-
-    private func buildBoard() {
-        removeAllChildren()
-        tiles.removeAll(keepingCapacity: true)
-
-        let boardSize = min(size.width * 0.79, size.height * 0.84)
-        let cell = boardSize / CGFloat(columns)
-        let originX = -boardSize / 2 + cell / 2
-        let originY = -boardSize / 2 + cell / 2
-
-        addChild(makeBoardChassis(boardSize: boardSize, cell: cell))
-
-        for row in 0..<rows {
-            addChild(makeSource(row: row, x: -boardSize / 2 - cell * 0.43, y: originY + CGFloat(row) * cell, cell: cell))
-            addChild(makeRocket(row: row, x: boardSize / 2 + cell * 0.43, y: originY + CGFloat(row) * cell, cell: cell))
-
-            for column in 0..<columns {
-                let tile = makeTile(cell: cell, row: row, column: column)
-                tile.position = CGPoint(
-                    x: originX + CGFloat(column) * cell,
-                    y: originY + CGFloat(row) * cell
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+            GeometryReader { proxy in
+                Canvas { context, size in
+                    let now = timeline.date.timeIntervalSinceReferenceDate
+                    let frame = engine.renderFrame(at: now)
+                    CircuitCanvasRenderer.draw(
+                        context: &context,
+                        size: size,
+                        tiles: engine.tiles,
+                        theme: engine.theme,
+                        frame: frame,
+                        now: now
+                    )
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    SpatialTapGesture().onEnded { value in
+                        handleTap(value.location, size: proxy.size, now: timeline.date.timeIntervalSinceReferenceDate)
+                    }
                 )
-                addChild(tile)
-                tiles.append(tile)
+                .onChange(of: timeline.date) { _, date in
+                    engine.advanceFrame(at: date.timeIntervalSinceReferenceDate)
+                }
             }
         }
+        .aspectRatio(768.0 / 720.0, contentMode: .fit)
+        .accessibilityLabel("SkyCircuit circuit board")
+        .accessibilityHint("Tap conduit tiles to rotate them")
     }
 
-    private func makeBoardChassis(boardSize: CGFloat, cell: CGFloat) -> SKNode {
-        let node = SKNode()
-
-        let shadow = SKShapeNode(
-            rectOf: CGSize(width: boardSize + cell * 0.38, height: boardSize + cell * 0.38),
-            cornerRadius: cell * 0.32
-        )
-        shadow.fillColor = SKColor(white: 0.005, alpha: 0.78)
-        shadow.strokeColor = .clear
-        shadow.position.y = -cell * 0.05
-        shadow.zPosition = -12
-        node.addChild(shadow)
-
-        let frame = SKShapeNode(
-            rectOf: CGSize(width: boardSize + cell * 0.28, height: boardSize + cell * 0.28),
-            cornerRadius: cell * 0.28
-        )
-        frame.fillColor = SKColor(red: 0.025, green: 0.045, blue: 0.075, alpha: 0.98)
-        frame.strokeColor = SKColor(red: 0.25, green: 0.43, blue: 0.62, alpha: 0.78)
-        frame.lineWidth = max(2, cell * 0.035)
-        frame.glowWidth = cell * 0.018
-        frame.zPosition = -10
-        node.addChild(frame)
-
-        let inner = SKShapeNode(
-            rectOf: CGSize(width: boardSize + cell * 0.07, height: boardSize + cell * 0.07),
-            cornerRadius: cell * 0.18
-        )
-        inner.fillColor = SKColor(red: 0.035, green: 0.028, blue: 0.025, alpha: 1)
-        inner.strokeColor = SKColor(red: 0.52, green: 0.3, blue: 0.12, alpha: 0.45)
-        inner.lineWidth = 1
-        inner.zPosition = -9
-        node.addChild(inner)
-
-        return node
+    private func handleTap(_ point: CGPoint, size: CGSize, now: TimeInterval) {
+        guard size.width > 0, size.height > 0 else { return }
+        let logicalX = point.x * 768 / size.width
+        let logicalY = point.y * 720 / size.height
+        let column = Int((logicalX - 96) / 72)
+        let row = Int((logicalY - 72) / 72)
+        guard row >= 0, row < 8, column >= 0, column < 8 else { return }
+        engine.rotateTile(row: row, column: column, at: now)
     }
 
-    private func makeTile(cell: CGFloat, row: Int, column: Int) -> SKShapeNode {
-        let side = cell * 0.91
-        let tile = SKShapeNode(rectOf: CGSize(width: side, height: side), cornerRadius: cell * 0.1)
-        tile.name = "tile-\(row)-\(column)"
-        tile.fillColor = SKColor(red: 0.045, green: 0.065, blue: 0.09, alpha: 1)
-        tile.strokeColor = SKColor(red: 0.19, green: 0.29, blue: 0.39, alpha: 1)
-        tile.lineWidth = max(1.2, cell * 0.018)
-        tile.userData = [
-            "row": row,
-            "column": column,
-            "target": (row * 3 + column * 5) % 4,
-        ]
+}
 
-        let inset = SKShapeNode(rectOf: CGSize(width: side * 0.86, height: side * 0.86), cornerRadius: cell * 0.075)
-        inset.fillColor = SKColor(red: 0.075, green: 0.09, blue: 0.115, alpha: 1)
-        inset.strokeColor = SKColor(red: 0.34, green: 0.25, blue: 0.15, alpha: 0.55)
-        inset.lineWidth = 1
-        inset.zPosition = 0.1
-        tile.addChild(inset)
+private enum CircuitCanvasRenderer {
+    static let logicalSize = CGSize(width: 768, height: 720)
+    static let boardOrigin = CGPoint(x: 96, y: 72)
+    static let cell: CGFloat = 72
 
-        addBolts(to: tile, cell: cell)
-
-        let kind = PipeKind(rawValue: (row * 5 + column * 3) % 4) ?? .elbow
-        let pipePath = makePipePath(kind: kind, cell: cell)
-        addPipeLayers(path: pipePath, to: tile, cell: cell)
-
-        let initialQuarter = (row + column * 2) % 4
-        tile.zRotation = -CGFloat(initialQuarter) * .pi / 2
-        return tile
+    static func draw(
+        context: inout GraphicsContext,
+        size: CGSize,
+        tiles: [CircuitTile],
+        theme: CircuitTheme,
+        frame: CircuitRenderFrame,
+        now: TimeInterval
+    ) {
+        guard size.width > 0, size.height > 0 else { return }
+        context.scaleBy(x: size.width / logicalSize.width, y: size.height / logicalSize.height)
+        let palette = CircuitPalette(theme: theme)
+        drawBackdrop(context: &context, palette: palette)
+        drawChassis(context: &context, palette: palette)
+        drawTiles(context: &context, tiles: tiles, palette: palette, frame: frame, now: now)
+        drawSources(context: &context, palette: palette, frame: frame, now: now)
+        drawRockets(context: &context, palette: palette, frame: frame, now: now)
     }
 
-    private func makePipePath(kind: PipeKind, cell: CGFloat) -> CGPath {
-        let extent = cell * 0.34
-        let path = CGMutablePath()
-
-        switch kind {
-        case .elbow:
-            path.move(to: CGPoint(x: -extent, y: 0))
-            path.addLine(to: CGPoint(x: -extent * 0.25, y: 0))
-            path.addQuadCurve(
-                to: CGPoint(x: 0, y: extent * 0.25),
-                control: CGPoint(x: 0, y: 0)
+    private static func drawBackdrop(context: inout GraphicsContext, palette: CircuitPalette) {
+        let rect = CGRect(origin: .zero, size: logicalSize)
+        context.fill(
+            Path(rect),
+            with: .linearGradient(
+                Gradient(colors: [palette.backgroundTop, Color(red: 0.025, green: 0.07, blue: 0.15), palette.backgroundBottom]),
+                startPoint: .zero,
+                endPoint: CGPoint(x: 0, y: logicalSize.height)
             )
-            path.addLine(to: CGPoint(x: 0, y: extent))
-        case .straight:
-            path.move(to: CGPoint(x: -extent, y: 0))
-            path.addLine(to: CGPoint(x: extent, y: 0))
-        case .tee:
-            path.move(to: CGPoint(x: -extent, y: 0))
-            path.addLine(to: CGPoint(x: extent, y: 0))
-            path.move(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: extent))
-        case .cross:
-            path.move(to: CGPoint(x: -extent, y: 0))
-            path.addLine(to: CGPoint(x: extent, y: 0))
-            path.move(to: CGPoint(x: 0, y: -extent))
-            path.addLine(to: CGPoint(x: 0, y: extent))
-        }
-        return path
+        )
+        drawNebula(context: &context, center: CGPoint(x: 155, y: 118), radius: 240, color: palette.nebulaA)
+        drawNebula(context: &context, center: CGPoint(x: 625, y: 165), radius: 230, color: palette.nebulaB)
+        drawStars(context: &context)
+        drawSkyline(context: &context, palette: palette)
     }
 
-    private func addPipeLayers(path: CGPath, to tile: SKShapeNode, cell: CGFloat) {
-        let shadow = SKShapeNode(path: path)
-        shadow.lineCap = .round
-        shadow.lineJoin = .round
-        shadow.lineWidth = max(9, cell * 0.24)
-        shadow.strokeColor = SKColor(red: 0.008, green: 0.012, blue: 0.018, alpha: 1)
-        shadow.zPosition = 1
-        tile.addChild(shadow)
-
-        let metal = SKShapeNode(path: path)
-        metal.lineCap = .round
-        metal.lineJoin = .round
-        metal.lineWidth = max(7, cell * 0.18)
-        metal.strokeColor = SKColor(red: 0.25, green: 0.27, blue: 0.31, alpha: 1)
-        metal.zPosition = 2
-        tile.addChild(metal)
-
-        let rim = SKShapeNode(path: path)
-        rim.lineCap = .round
-        rim.lineJoin = .round
-        rim.lineWidth = max(3, cell * 0.085)
-        rim.strokeColor = SKColor(red: 0.54, green: 0.6, blue: 0.68, alpha: 0.92)
-        rim.zPosition = 3
-        tile.addChild(rim)
-
-        let energy = SKShapeNode(path: path)
-        energy.name = "energy"
-        energy.lineCap = .round
-        energy.lineJoin = .round
-        energy.lineWidth = max(1.8, cell * 0.038)
-        energy.strokeColor = SKColor(red: 1, green: 0.55, blue: 0.09, alpha: 1)
-        energy.glowWidth = cell * 0.09
-        energy.alpha = 0.16
-        energy.zPosition = 4
-        tile.addChild(energy)
-
-        let hub = SKShapeNode(circleOfRadius: max(3.5, cell * 0.064))
-        hub.fillColor = SKColor(red: 0.2, green: 0.12, blue: 0.055, alpha: 1)
-        hub.strokeColor = SKColor(red: 0.92, green: 0.55, blue: 0.19, alpha: 1)
-        hub.lineWidth = max(1, cell * 0.018)
-        hub.zPosition = 5
-        tile.addChild(hub)
+    private static func drawNebula(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(
+            Path(ellipseIn: rect),
+            with: .radialGradient(
+                Gradient(colors: [color, color.opacity(0.12), .clear]),
+                center: center,
+                startRadius: 0,
+                endRadius: radius
+            )
+        )
     }
 
-    private func addBolts(to tile: SKShapeNode, cell: CGFloat) {
-        let offset = cell * 0.34
-        for point in [
-            CGPoint(x: -offset, y: -offset), CGPoint(x: offset, y: -offset),
-            CGPoint(x: -offset, y: offset), CGPoint(x: offset, y: offset),
-        ] {
-            let bolt = SKShapeNode(circleOfRadius: max(1.1, cell * 0.018))
-            bolt.position = point
-            bolt.fillColor = SKColor(red: 0.45, green: 0.34, blue: 0.2, alpha: 0.9)
-            bolt.strokeColor = SKColor(white: 0.1, alpha: 1)
-            bolt.lineWidth = 0.7
-            bolt.zPosition = 6
-            tile.addChild(bolt)
+    private static func drawStars(context: inout GraphicsContext) {
+        for index in 0..<78 {
+            let x = CGFloat((index * 137 + 29) % 768)
+            let y = CGFloat((index * 83 + 17) % 720)
+            let radius = 0.7 + CGFloat(index % 4) * 0.28
+            let color = index % 7 == 0 ? Color.cyan.opacity(0.72) : Color.white.opacity(0.46)
+            context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: radius * 2, height: radius * 2)), with: .color(color))
+            guard index % 13 == 0 else { continue }
+            var sparkle = Path()
+            sparkle.move(to: CGPoint(x: x - 5, y: y))
+            sparkle.addLine(to: CGPoint(x: x + 5, y: y))
+            sparkle.move(to: CGPoint(x: x, y: y - 5))
+            sparkle.addLine(to: CGPoint(x: x, y: y + 5))
+            context.stroke(sparkle, with: .color(.white.opacity(0.45)), lineWidth: 0.7)
         }
     }
 
-    private func makeSource(row: Int, x: CGFloat, y: CGFloat, cell: CGFloat) -> SKNode {
-        let source = SKNode()
-        source.position = CGPoint(x: x, y: y)
-        source.zPosition = 8
-
-        let housing = SKShapeNode(circleOfRadius: cell * 0.17)
-        housing.fillColor = SKColor(red: 0.11, green: 0.12, blue: 0.15, alpha: 1)
-        housing.strokeColor = SKColor(red: 0.52, green: 0.37, blue: 0.19, alpha: 1)
-        housing.lineWidth = max(1.2, cell * 0.025)
-        source.addChild(housing)
-
-        let core = SKShapeNode(circleOfRadius: cell * 0.075)
-        core.fillColor = SKColor(red: 1, green: 0.54, blue: 0.11, alpha: 1)
-        core.strokeColor = .white
-        core.lineWidth = 1
-        core.glowWidth = cell * 0.12
-        source.addChild(core)
-
-        core.run(.repeatForever(.sequence([
-            .fadeAlpha(to: 0.58, duration: 0.7 + Double(row % 3) * 0.08),
-            .fadeAlpha(to: 1, duration: 0.55),
-        ])))
-        return source
+    private static func drawSkyline(context: inout GraphicsContext, palette: CircuitPalette) {
+        drawTower(context: &context, x: 10, base: 716, height: 170, width: 42, palette: palette)
+        drawTower(context: &context, x: 60, base: 716, height: 112, width: 30, palette: palette)
+        drawTower(context: &context, x: 704, base: 716, height: 184, width: 44, palette: palette)
+        drawTower(context: &context, x: 662, base: 716, height: 120, width: 30, palette: palette)
     }
 
-    private func makeRocket(row: Int, x: CGFloat, y: CGFloat, cell: CGFloat) -> SKNode {
-        let rocket = SKNode()
-        rocket.position = CGPoint(x: x, y: y)
-        rocket.zPosition = 9
-
-        let bodyPath = CGMutablePath()
-        bodyPath.move(to: CGPoint(x: 0, y: cell * 0.25))
-        bodyPath.addQuadCurve(to: CGPoint(x: cell * 0.115, y: -cell * 0.11), control: CGPoint(x: cell * 0.16, y: cell * 0.08))
-        bodyPath.addLine(to: CGPoint(x: cell * 0.07, y: -cell * 0.22))
-        bodyPath.addLine(to: CGPoint(x: -cell * 0.07, y: -cell * 0.22))
-        bodyPath.addLine(to: CGPoint(x: -cell * 0.115, y: -cell * 0.11))
-        bodyPath.addQuadCurve(to: CGPoint(x: 0, y: cell * 0.25), control: CGPoint(x: -cell * 0.16, y: cell * 0.08))
-        bodyPath.closeSubpath()
-
-        let body = SKShapeNode(path: bodyPath)
-        body.fillColor = SKColor(red: 0.96, green: 0.13, blue: 0.55, alpha: 1)
-        body.strokeColor = SKColor(red: 1, green: 0.63, blue: 0.82, alpha: 1)
-        body.lineWidth = 1.2
-        body.glowWidth = cell * 0.03
-        rocket.addChild(body)
-
-        let window = SKShapeNode(circleOfRadius: cell * 0.055)
-        window.position.y = cell * 0.045
-        window.fillColor = SKColor(red: 0.15, green: 0.82, blue: 1, alpha: 1)
-        window.strokeColor = SKColor(white: 0.9, alpha: 0.85)
-        window.lineWidth = 1
-        window.glowWidth = cell * 0.025
-        rocket.addChild(window)
-
-        let flame = SKShapeNode(path: flamePath(cell: cell))
-        flame.name = "flame"
-        flame.fillColor = SKColor(red: 1, green: 0.56, blue: 0.08, alpha: 1)
-        flame.strokeColor = SKColor(red: 1, green: 0.9, blue: 0.45, alpha: 0.9)
-        flame.glowWidth = cell * 0.08
-        flame.position.y = -cell * 0.25
-        rocket.addChild(flame)
-
-        flame.run(.repeatForever(.sequence([
-            .scaleY(to: 0.72, duration: 0.09 + Double(row % 2) * 0.02),
-            .scaleY(to: 1.08, duration: 0.12),
-        ])))
-        return rocket
+    private static func drawTower(context: inout GraphicsContext, x: CGFloat, base: CGFloat, height: CGFloat, width: CGFloat, palette: CircuitPalette) {
+        var tower = Path()
+        tower.move(to: CGPoint(x: x, y: base))
+        tower.addLine(to: CGPoint(x: x, y: base - height + 22))
+        tower.addLine(to: CGPoint(x: x + width * 0.35, y: base - height + 12))
+        tower.addLine(to: CGPoint(x: x + width * 0.5, y: base - height))
+        tower.addLine(to: CGPoint(x: x + width * 0.65, y: base - height + 12))
+        tower.addLine(to: CGPoint(x: x + width, y: base - height + 22))
+        tower.addLine(to: CGPoint(x: x + width, y: base))
+        tower.closeSubpath()
+        context.fill(tower, with: .color(palette.skyline.opacity(0.9)))
     }
 
-    private func flamePath(cell: CGFloat) -> CGPath {
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: -cell * 0.045, y: 0))
-        path.addQuadCurve(to: CGPoint(x: 0, y: -cell * 0.16), control: CGPoint(x: -cell * 0.015, y: -cell * 0.09))
-        path.addQuadCurve(to: CGPoint(x: cell * 0.045, y: 0), control: CGPoint(x: cell * 0.015, y: -cell * 0.09))
-        path.closeSubpath()
-        return path
+    private static func drawChassis(context: inout GraphicsContext, palette: CircuitPalette) {
+        let outer = roundedRect(CGRect(x: 24, y: 38, width: 720, height: 646), radius: 32)
+        context.fill(
+            outer,
+            with: .linearGradient(
+                Gradient(colors: [palette.tileEdge, Color(red: 0.065, green: 0.105, blue: 0.16), .black, Color(red: 0.08, green: 0.15, blue: 0.23), palette.tileEdge]),
+                startPoint: CGPoint(x: 24, y: 38),
+                endPoint: CGPoint(x: 744, y: 684)
+            )
+        )
+        context.stroke(outer, with: .color(.black.opacity(0.92)), lineWidth: 5)
+        context.stroke(roundedRect(CGRect(x: 34, y: 48, width: 700, height: 626), radius: 25), with: .color(.cyan.opacity(0.15)), lineWidth: 2)
+        context.stroke(roundedRect(CGRect(x: 80, y: 58, width: 608, height: 604), radius: 19), with: .color(.black.opacity(0.72)), lineWidth: 8)
+        for point in [CGPoint(x: 40, y: 54), CGPoint(x: 728, y: 54), CGPoint(x: 40, y: 668), CGPoint(x: 728, y: 668)] {
+            drawBolt(context: &context, center: point, radius: 5, color: palette.bolt)
+        }
     }
 
-    private func updateEnergy(on tile: SKShapeNode, quality: Double) {
-        guard let energy = tile.childNode(withName: "energy") as? SKShapeNode else { return }
-        let targetAlpha = quality > 0.92 ? CGFloat(1) : CGFloat(0.15 + quality * 0.25)
-        energy.removeAllActions()
-        energy.run(.fadeAlpha(to: targetAlpha, duration: 0.12))
-        energy.strokeColor = quality > 0.92
-            ? SKColor(red: 1, green: 0.53, blue: 0.06, alpha: 1)
-            : SKColor(red: 0.35, green: 0.76, blue: 0.92, alpha: 1)
-    }
-
-    private func playIgnitionPulse(from tile: SKShapeNode) {
-        guard let energy = tile.childNode(withName: "energy") as? SKShapeNode else { return }
-        energy.run(.sequence([
-            .group([
-                .fadeAlpha(to: 1, duration: 0.06),
-                .scale(to: 1.07, duration: 0.06),
-            ]),
-            .group([
-                .scale(to: 1, duration: 0.16),
-                .fadeAlpha(to: 0.82, duration: 0.16),
-            ]),
-        ]))
-    }
-
-    private func tileAncestor(from node: SKNode) -> SKShapeNode? {
-        var candidate: SKNode? = node
-        while let current = candidate {
-            if let tile = current as? SKShapeNode, tile.name?.hasPrefix("tile-") == true {
-                return tile
+    private static func drawTiles(context: inout GraphicsContext, tiles: [CircuitTile], palette: CircuitPalette, frame: CircuitRenderFrame, now: TimeInterval) {
+        guard tiles.count >= 64 else { return }
+        for row in 0..<8 {
+            for column in 0..<8 {
+                let cellID = CircuitCell(row: row, column: column)
+                drawTile(
+                    context: &context,
+                    row: row,
+                    column: column,
+                    tile: tiles[row * 8 + column],
+                    palette: palette,
+                    frame: frame,
+                    hot: frame.powered.contains(cellID) || frame.burning.contains(cellID),
+                    now: now
+                )
             }
-            candidate = current.parent
         }
-        return nil
     }
 
-    private func normalizedQuarter(_ angle: CGFloat) -> Int {
-        let quarter = CGFloat.pi / 2
-        let raw = Int(round((-angle / quarter).truncatingRemainder(dividingBy: 4)))
-        return (raw % 4 + 4) % 4
+    private static func drawTile(
+        context: inout GraphicsContext,
+        row: Int,
+        column: Int,
+        tile: CircuitTile,
+        palette: CircuitPalette,
+        frame: CircuitRenderFrame,
+        hot: Bool,
+        now: TimeInterval
+    ) {
+        let x = boardOrigin.x + CGFloat(column) * cell
+        let y = boardOrigin.y + CGFloat(row) * cell
+        let rect = CGRect(x: x + 3, y: y + 3, width: cell - 6, height: cell - 6)
+        drawPlate(context: &context, rect: rect, palette: palette, hot: hot)
+        drawTileBolts(context: &context, x: x, y: y, palette: palette)
+        drawConduit(context: &context, center: CGPoint(x: x + cell / 2, y: y + cell / 2), tile: tile, palette: palette, hot: hot, burning: frame.burning.contains(CircuitCell(row: row, column: column)))
+        guard frame.burning.contains(CircuitCell(row: row, column: column)) else { return }
+        drawBurnHeads(context: &context, row: row, column: column, tile: tile, palette: palette, frame: frame, now: now)
     }
+
+    private static func drawPlate(context: inout GraphicsContext, rect: CGRect, palette: CircuitPalette, hot: Bool) {
+        let plate = roundedRect(rect, radius: 9)
+        context.fill(
+            plate,
+            with: .linearGradient(
+                Gradient(colors: [palette.tileTop, palette.tile, palette.tileBottom, Color(red: 0.018, green: 0.028, blue: 0.045)]),
+                startPoint: CGPoint(x: rect.minX, y: rect.minY),
+                endPoint: CGPoint(x: rect.maxX, y: rect.maxY)
+            )
+        )
+        context.stroke(plate, with: .color(hot ? palette.powered.opacity(0.88) : .black.opacity(0.92)), lineWidth: hot ? 2.4 : 2.2)
+        context.stroke(roundedRect(rect.insetBy(dx: 4, dy: 4), radius: 7), with: .color(hot ? palette.powered.opacity(0.35) : .white.opacity(0.10)), lineWidth: 1)
+        var lowerEdge = Path()
+        lowerEdge.move(to: CGPoint(x: rect.minX + 7, y: rect.maxY - 5))
+        lowerEdge.addLine(to: CGPoint(x: rect.maxX - 7, y: rect.maxY - 5))
+        context.stroke(lowerEdge, with: .color(.black.opacity(0.58)), lineWidth: 1)
+    }
+
+    private static func drawTileBolts(context: inout GraphicsContext, x: CGFloat, y: CGFloat, palette: CircuitPalette) {
+        let points = [
+            CGPoint(x: x + 11, y: y + 11), CGPoint(x: x + cell - 11, y: y + 11),
+            CGPoint(x: x + 11, y: y + cell - 11), CGPoint(x: x + cell - 11, y: y + cell - 11),
+        ]
+        for point in points { drawBolt(context: &context, center: point, radius: 2.2, color: palette.bolt) }
+    }
+
+    private static func drawConduit(context: inout GraphicsContext, center: CGPoint, tile: CircuitTile, palette: CircuitPalette, hot: Bool, burning: Bool) {
+        let path = conduitPath(center: center, connections: tile.connections, reach: cell / 2 - 7)
+        context.stroke(path, with: .color(.black.opacity(0.82)), style: StrokeStyle(lineWidth: 24, lineCap: .round, lineJoin: .round))
+        context.stroke(
+            path,
+            with: .linearGradient(
+                Gradient(colors: [palette.pipeDark, palette.pipeMid, palette.pipeLight, palette.pipeMid, palette.pipeDark]),
+                startPoint: CGPoint(x: center.x - 34, y: center.y - 34),
+                endPoint: CGPoint(x: center.x + 34, y: center.y + 34)
+            ),
+            style: StrokeStyle(lineWidth: 17, lineCap: .round, lineJoin: .round)
+        )
+        context.stroke(path, with: .color(.white.opacity(0.33)), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+        context.stroke(path, with: .color(palette.copper.opacity(0.5)), style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+        drawCouplers(context: &context, center: center, connections: tile.connections, palette: palette)
+        drawHub(context: &context, center: center, connections: tile.connections, palette: palette)
+        guard hot else { return }
+        let alpha = burning ? 0.72 : 1.0
+        context.stroke(path, with: .color(palette.powered.opacity(0.16 * alpha)), style: StrokeStyle(lineWidth: 21, lineCap: .round, lineJoin: .round))
+        context.stroke(path, with: .color(palette.powered.opacity(0.95 * alpha)), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+        context.stroke(path, with: .color(palette.poweredCore), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+    }
+
+    private static func drawCouplers(context: inout GraphicsContext, center: CGPoint, connections: CircuitDirection, palette: CircuitPalette) {
+        for endpoint in endpoints(center: center, connections: connections, reach: cell / 2 - 10) {
+            let outer = CGRect(x: endpoint.point.x - 6, y: endpoint.point.y - 6, width: 12, height: 12)
+            context.fill(Path(ellipseIn: outer), with: .color(palette.copper))
+            context.stroke(Path(ellipseIn: outer), with: .color(.black.opacity(0.82)), lineWidth: 1.2)
+            context.fill(Path(ellipseIn: outer.insetBy(dx: 3, dy: 3)), with: .color(palette.pipeLight.opacity(0.6)))
+        }
+    }
+
+    private static func drawHub(context: inout GraphicsContext, center: CGPoint, connections: CircuitDirection, palette: CircuitPalette) {
+        guard endpoints(center: center, connections: connections, reach: 1).count >= 3 else { return }
+        let rect = CGRect(x: center.x - 11, y: center.y - 11, width: 22, height: 22)
+        context.fill(
+            Path(ellipseIn: rect),
+            with: .radialGradient(Gradient(colors: [palette.pipeLight, palette.pipeMid, palette.pipeDark]), center: center, startRadius: 0, endRadius: 12)
+        )
+        context.stroke(Path(ellipseIn: rect), with: .color(palette.copper), lineWidth: 2)
+        context.fill(Path(ellipseIn: rect.insetBy(dx: 7, dy: 7)), with: .color(Color(red: 0.055, green: 0.08, blue: 0.11)))
+    }
+
+    private static func drawSources(context: inout GraphicsContext, palette: CircuitPalette, frame: CircuitRenderFrame, now: TimeInterval) {
+        for row in 0..<8 {
+            let y = boardOrigin.y + CGFloat(row) * cell + cell / 2
+            let hot = frame.powered.contains(CircuitCell(row: row, column: 0)) || frame.burning.contains(CircuitCell(row: row, column: 0))
+            drawSourceConnector(context: &context, y: y, palette: palette)
+            drawGenerator(context: &context, center: CGPoint(x: 57, y: y), palette: palette, hot: hot, now: now)
+        }
+    }
+
+    private static func drawSourceConnector(context: inout GraphicsContext, y: CGFloat, palette: CircuitPalette) {
+        var line = Path()
+        line.move(to: CGPoint(x: 71, y: y))
+        line.addLine(to: CGPoint(x: boardOrigin.x + 2, y: y))
+        context.stroke(line, with: .color(.black.opacity(0.94)), style: StrokeStyle(lineWidth: 18, lineCap: .round))
+        context.stroke(
+            line,
+            with: .linearGradient(Gradient(colors: [palette.pipeLight, palette.pipeMid, palette.pipeDark]), startPoint: CGPoint(x: 71, y: y - 8), endPoint: CGPoint(x: 71, y: y + 8)),
+            style: StrokeStyle(lineWidth: 11, lineCap: .round)
+        )
+    }
+
+    private static func drawGenerator(context: inout GraphicsContext, center: CGPoint, palette: CircuitPalette, hot: Bool, now: TimeInterval) {
+        let housing = CGRect(x: center.x - 20, y: center.y - 20, width: 40, height: 40)
+        context.fill(
+            Path(ellipseIn: housing),
+            with: .radialGradient(Gradient(colors: [palette.pipeLight, palette.pipeMid, palette.pipeDark, .black]), center: CGPoint(x: center.x - 5, y: center.y - 5), startRadius: 1, endRadius: 22)
+        )
+        context.stroke(Path(ellipseIn: housing), with: .color(hot ? palette.powered : palette.copper), lineWidth: hot ? 2.8 : 1.8)
+        for index in 0..<6 {
+            let angle = Double(index) * .pi / 3
+            let point = CGPoint(x: center.x + CGFloat(cos(angle)) * 16, y: center.y + CGFloat(sin(angle)) * 16)
+            drawBolt(context: &context, center: point, radius: 1.8, color: palette.bolt)
+        }
+        let pulse = hot ? 12 + CGFloat(sin(now * 10)) * 1.5 : 9
+        let core = CGRect(x: center.x - pulse, y: center.y - pulse, width: pulse * 2, height: pulse * 2)
+        context.fill(Path(ellipseIn: core), with: .radialGradient(Gradient(colors: [.white, palette.poweredCore, hot ? palette.powered : palette.spark, .clear]), center: center, startRadius: 0, endRadius: pulse))
+    }
+
+    private static func drawRockets(context: inout GraphicsContext, palette: CircuitPalette, frame: CircuitRenderFrame, now: TimeInterval) {
+        for row in 0..<8 {
+            let y = boardOrigin.y + CGFloat(row) * cell + cell / 2
+            let launching = frame.rocketRows.contains(row)
+            let hot = launching || frame.powered.contains(CircuitCell(row: row, column: 7))
+            drawRocketFeed(context: &context, y: y, palette: palette, hot: hot)
+            drawRocket(context: &context, center: CGPoint(x: 718, y: y - CGFloat(frame.launchProgress) * 27), palette: palette, launching: launching, progress: frame.launchProgress, now: now)
+        }
+    }
+
+    private static func drawRocketFeed(context: inout GraphicsContext, y: CGFloat, palette: CircuitPalette, hot: Bool) {
+        var line = Path()
+        line.move(to: CGPoint(x: boardOrigin.x + 8 * cell - 2, y: y))
+        line.addLine(to: CGPoint(x: 694, y: y))
+        context.stroke(line, with: .color(.black.opacity(0.94)), style: StrokeStyle(lineWidth: 19, lineCap: .round))
+        context.stroke(line, with: .color(palette.pipeMid), style: StrokeStyle(lineWidth: 11, lineCap: .round))
+        let socket = CGRect(x: 674, y: y - 18, width: 36, height: 36)
+        context.fill(Path(ellipseIn: socket), with: .radialGradient(Gradient(colors: [palette.pipeLight, palette.pipeMid, palette.pipeDark, .black]), center: CGPoint(x: 688, y: y - 5), startRadius: 1, endRadius: 19))
+        context.stroke(Path(ellipseIn: socket), with: .color(hot ? palette.powered : palette.copper), lineWidth: hot ? 2.8 : 1.8)
+        context.fill(Path(ellipseIn: socket.insetBy(dx: 11, dy: 11)), with: .color(hot ? palette.powered : Color(red: 0.055, green: 0.08, blue: 0.11)))
+    }
+
+    private static func drawRocket(context: inout GraphicsContext, center: CGPoint, palette: CircuitPalette, launching: Bool, progress: Double, now: TimeInterval) {
+        if launching { drawRocketFlame(context: &context, center: center, palette: palette, progress: progress, now: now) }
+        var hull = Path()
+        hull.move(to: CGPoint(x: center.x, y: center.y - 30))
+        hull.addCurve(to: CGPoint(x: center.x + 12, y: center.y + 9), control1: CGPoint(x: center.x + 10, y: center.y - 23), control2: CGPoint(x: center.x + 13, y: center.y - 7))
+        hull.addLine(to: CGPoint(x: center.x + 8, y: center.y + 21))
+        hull.addLine(to: CGPoint(x: center.x - 8, y: center.y + 21))
+        hull.addLine(to: CGPoint(x: center.x - 12, y: center.y + 9))
+        hull.addCurve(to: CGPoint(x: center.x, y: center.y - 30), control1: CGPoint(x: center.x - 13, y: center.y - 7), control2: CGPoint(x: center.x - 10, y: center.y - 23))
+        context.fill(hull, with: .linearGradient(Gradient(colors: [palette.rocketDark, palette.rocket, palette.rocketLight, palette.rocket, palette.rocketDark]), startPoint: CGPoint(x: center.x - 14, y: center.y), endPoint: CGPoint(x: center.x + 14, y: center.y)))
+        context.stroke(hull, with: .color(palette.rocketDark), lineWidth: 1.4)
+        drawRocketFins(context: &context, center: center, color: palette.rocketDark)
+        let window = CGRect(x: center.x - 6, y: center.y - 14, width: 12, height: 12)
+        context.fill(Path(ellipseIn: window), with: .radialGradient(Gradient(colors: [.white, palette.glass, Color(red: 0.02, green: 0.31, blue: 0.55)]), center: CGPoint(x: center.x - 2, y: center.y - 10), startRadius: 0, endRadius: 7))
+        context.stroke(Path(ellipseIn: window), with: .color(.white.opacity(0.8)), lineWidth: 1)
+    }
+
+    private static func drawRocketFins(context: inout GraphicsContext, center: CGPoint, color: Color) {
+        var left = Path()
+        left.move(to: CGPoint(x: center.x - 9, y: center.y + 9))
+        left.addLine(to: CGPoint(x: center.x - 18, y: center.y + 22))
+        left.addLine(to: CGPoint(x: center.x - 8, y: center.y + 18))
+        left.closeSubpath()
+        context.fill(left, with: .color(color))
+        var right = Path()
+        right.move(to: CGPoint(x: center.x + 9, y: center.y + 9))
+        right.addLine(to: CGPoint(x: center.x + 18, y: center.y + 22))
+        right.addLine(to: CGPoint(x: center.x + 8, y: center.y + 18))
+        right.closeSubpath()
+        context.fill(right, with: .color(color))
+    }
+
+    private static func drawRocketFlame(context: inout GraphicsContext, center: CGPoint, palette: CircuitPalette, progress: Double, now: TimeInterval) {
+        let flutter = CGFloat(sin(now * 28)) * 4
+        let launchStretch = CGFloat(progress) * 13
+        var flame = Path()
+        flame.move(to: CGPoint(x: center.x - 7, y: center.y + 22))
+        flame.addQuadCurve(to: CGPoint(x: center.x, y: center.y + 52 + launchStretch + flutter), control: CGPoint(x: center.x - 11, y: center.y + 35))
+        flame.addQuadCurve(to: CGPoint(x: center.x + 7, y: center.y + 22), control: CGPoint(x: center.x + 11, y: center.y + 35))
+        flame.closeSubpath()
+        context.fill(flame, with: .linearGradient(Gradient(colors: [.white, palette.powered, palette.spark, .clear]), startPoint: CGPoint(x: center.x, y: center.y + 20), endPoint: CGPoint(x: center.x, y: center.y + 66)))
+    }
+
+    private static func drawBurnHeads(context: inout GraphicsContext, row: Int, column: Int, tile: CircuitTile, palette: CircuitPalette, frame: CircuitRenderFrame, now: TimeInterval) {
+        let center = CGPoint(x: boardOrigin.x + CGFloat(column) * cell + cell / 2, y: boardOrigin.y + CGFloat(row) * cell + cell / 2)
+        for point in burnHeadPositions(row: row, column: column, tile: tile, frame: frame, center: center) {
+            drawBurnOrb(context: &context, center: point, palette: palette, now: now)
+        }
+    }
+
+    private static func burnHeadPositions(row: Int, column: Int, tile: CircuitTile, frame: CircuitRenderFrame, center: CGPoint) -> [CGPoint] {
+        let points = endpoints(center: center, connections: tile.connections, reach: cell / 2 - 9)
+        let incoming = points.filter { burnComesFrom(row: row, column: column, direction: $0.direction, frame: frame) }
+        let outgoing = points.filter { burnGoesTo(row: row, column: column, direction: $0.direction, frame: frame) }
+        let progress = CGFloat(min(1, max(0, frame.stageProgress)))
+        guard !(incoming.isEmpty && outgoing.isEmpty) else { return [center] }
+        if incoming.count == 1, outgoing.count == 1 {
+            return [quadraticPoint(start: incoming[0].point, control: center, end: outgoing[0].point, t: progress)]
+        }
+        if progress < 0.5, !incoming.isEmpty { return incoming.map { lerp(start: $0.point, end: center, t: progress * 2) } }
+        if !outgoing.isEmpty { return outgoing.map { lerp(start: center, end: $0.point, t: (progress - 0.5) * 2) } }
+        return incoming.map { lerp(start: $0.point, end: center, t: progress) }
+    }
+
+    private static func burnComesFrom(row: Int, column: Int, direction: CircuitDirection, frame: CircuitRenderFrame) -> Bool {
+        if direction == .west, column == 0 { return true }
+        guard let neighbor = neighbor(row: row, column: column, direction: direction) else { return false }
+        return frame.powered.contains(neighbor)
+    }
+
+    private static func burnGoesTo(row: Int, column: Int, direction: CircuitDirection, frame: CircuitRenderFrame) -> Bool {
+        if direction == .east, column == 7, frame.rocketRows.contains(row) { return true }
+        guard let neighbor = neighbor(row: row, column: column, direction: direction) else { return false }
+        return frame.nextStage.contains(neighbor)
+    }
+
+    private static func drawBurnOrb(context: inout GraphicsContext, center: CGPoint, palette: CircuitPalette, now: TimeInterval) {
+        let pulse = 1 + CGFloat(sin(now * 20)) * 0.1
+        let radius = 17 * pulse
+        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(Path(ellipseIn: rect), with: .radialGradient(Gradient(colors: [.white, palette.poweredCore, palette.powered, .clear]), center: center, startRadius: 0, endRadius: radius))
+        for index in 0..<5 {
+            let angle = now * 5 + Double(index) * .pi * 0.4
+            let cosine = CGFloat(cos(angle))
+            let sine = CGFloat(sin(angle))
+            var ray = Path()
+            ray.move(to: CGPoint(x: center.x + cosine * 7, y: center.y + sine * 7))
+            ray.addLine(to: CGPoint(x: center.x + cosine * 14, y: center.y + sine * 14))
+            context.stroke(ray, with: .color(palette.poweredCore.opacity(0.8)), lineWidth: 1.7)
+        }
+    }
+
+    private static func drawBolt(context: inout GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        context.fill(Path(ellipseIn: rect), with: .color(color))
+        context.stroke(Path(ellipseIn: rect), with: .color(.black.opacity(0.82)), lineWidth: 0.8)
+        var slot = Path()
+        slot.move(to: CGPoint(x: center.x - radius * 0.5, y: center.y))
+        slot.addLine(to: CGPoint(x: center.x + radius * 0.5, y: center.y))
+        context.stroke(slot, with: .color(.black.opacity(0.72)), lineWidth: 0.7)
+    }
+
+    private static func conduitPath(center: CGPoint, connections: CircuitDirection, reach: CGFloat) -> Path {
+        let points = endpoints(center: center, connections: connections, reach: reach)
+        var path = Path()
+        guard !points.isEmpty else { return path }
+        if points.count == 1 {
+            path.move(to: center)
+            path.addLine(to: points[0].point)
+        } else if points.count == 2, areOpposite(points[0].direction, points[1].direction) {
+            path.move(to: points[0].point)
+            path.addLine(to: points[1].point)
+        } else if points.count == 2 {
+            path.move(to: points[0].point)
+            path.addQuadCurve(to: points[1].point, control: center)
+        } else {
+            for endpoint in points {
+                path.move(to: center)
+                path.addLine(to: endpoint.point)
+            }
+        }
+        return path
+    }
+
+    private static func endpoints(center: CGPoint, connections: CircuitDirection, reach: CGFloat) -> [(direction: CircuitDirection, point: CGPoint)] {
+        var result: [(CircuitDirection, CGPoint)] = []
+        if connections.contains(.north) { result.append((.north, CGPoint(x: center.x, y: center.y - reach))) }
+        if connections.contains(.east) { result.append((.east, CGPoint(x: center.x + reach, y: center.y))) }
+        if connections.contains(.south) { result.append((.south, CGPoint(x: center.x, y: center.y + reach))) }
+        if connections.contains(.west) { result.append((.west, CGPoint(x: center.x - reach, y: center.y))) }
+        return result
+    }
+
+    private static func neighbor(row: Int, column: Int, direction: CircuitDirection) -> CircuitCell? {
+        let cell: CircuitCell
+        switch direction {
+        case .north: cell = CircuitCell(row: row - 1, column: column)
+        case .east: cell = CircuitCell(row: row, column: column + 1)
+        case .south: cell = CircuitCell(row: row + 1, column: column)
+        default: cell = CircuitCell(row: row, column: column - 1)
+        }
+        guard cell.row >= 0, cell.row < 8, cell.column >= 0, cell.column < 8 else { return nil }
+        return cell
+    }
+
+    private static func areOpposite(_ first: CircuitDirection, _ second: CircuitDirection) -> Bool {
+        first.opposite == second
+    }
+
+    private static func quadraticPoint(start: CGPoint, control: CGPoint, end: CGPoint, t: CGFloat) -> CGPoint {
+        let inverse = 1 - t
+        return CGPoint(
+            x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+            y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
+        )
+    }
+
+    private static func lerp(start: CGPoint, end: CGPoint, t: CGFloat) -> CGPoint {
+        CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t)
+    }
+
+    private static func roundedRect(_ rect: CGRect, radius: CGFloat) -> Path {
+        var path = Path()
+        path.addRoundedRect(in: rect, cornerSize: CGSize(width: radius, height: radius))
+        return path
+    }
+}
+
+private struct CircuitPalette {
+    let backgroundTop: Color
+    let backgroundBottom: Color
+    let nebulaA: Color
+    let nebulaB: Color
+    let skyline: Color
+    let tile: Color
+    let tileTop: Color
+    let tileBottom: Color
+    let tileEdge: Color
+    let pipeDark: Color
+    let pipeMid: Color
+    let pipeLight: Color
+    let copper: Color
+    let bolt: Color
+    let powered: Color
+    let poweredCore: Color
+    let spark: Color
+    let rocket: Color
+    let rocketDark: Color
+    let rocketLight: Color
+    let glass: Color
+
+    init(theme: CircuitTheme) {
+        switch theme {
+        case .classic:
+            self.init(base: .classic)
+        case .novaGold:
+            self.init(base: .gold)
+        case .nebulaViolet:
+            self.init(base: .violet)
+        case .plasmaChrome:
+            self.init(base: .chrome)
+        }
+    }
+
+    private init(base: BasePalette) {
+        backgroundTop = base.backgroundTop
+        backgroundBottom = base.backgroundBottom
+        nebulaA = base.nebulaA
+        nebulaB = base.nebulaB
+        skyline = base.skyline
+        tile = base.tile
+        tileTop = base.tileTop
+        tileBottom = base.tileBottom
+        tileEdge = base.tileEdge
+        pipeDark = base.pipeDark
+        pipeMid = base.pipeMid
+        pipeLight = base.pipeLight
+        copper = base.copper
+        bolt = base.bolt
+        powered = base.powered
+        poweredCore = base.poweredCore
+        spark = base.spark
+        rocket = base.rocket
+        rocketDark = base.rocketDark
+        rocketLight = base.rocketLight
+        glass = base.glass
+    }
+}
+
+private struct BasePalette {
+    let backgroundTop: Color
+    let backgroundBottom: Color
+    let nebulaA: Color
+    let nebulaB: Color
+    let skyline: Color
+    let tile: Color
+    let tileTop: Color
+    let tileBottom: Color
+    let tileEdge: Color
+    let pipeDark: Color
+    let pipeMid: Color
+    let pipeLight: Color
+    let copper: Color
+    let bolt: Color
+    let powered: Color
+    let poweredCore: Color
+    let spark: Color
+    let rocket: Color
+    let rocketDark: Color
+    let rocketLight: Color
+    let glass: Color
+
+    static let classic = BasePalette(
+        backgroundTop: Color(red: 0.02, green: 0.09, blue: 0.19), backgroundBottom: Color(red: 0.008, green: 0.02, blue: 0.055),
+        nebulaA: Color(red: 0.12, green: 0.42, blue: 0.92).opacity(0.4), nebulaB: Color(red: 0.38, green: 0.22, blue: 0.78).opacity(0.3), skyline: Color(red: 0.025, green: 0.075, blue: 0.16),
+        tile: Color(red: 0.075, green: 0.105, blue: 0.15), tileTop: Color(red: 0.14, green: 0.18, blue: 0.24), tileBottom: Color(red: 0.035, green: 0.052, blue: 0.078), tileEdge: Color(red: 0.22, green: 0.31, blue: 0.42),
+        pipeDark: Color(red: 0.075, green: 0.09, blue: 0.12), pipeMid: Color(red: 0.29, green: 0.34, blue: 0.40), pipeLight: Color(red: 0.68, green: 0.76, blue: 0.83), copper: Color(red: 0.64, green: 0.34, blue: 0.12), bolt: Color(red: 0.55, green: 0.62, blue: 0.69),
+        powered: Color(red: 1.0, green: 0.48, blue: 0.08), poweredCore: Color(red: 1.0, green: 0.91, blue: 0.48), spark: Color(red: 1.0, green: 0.35, blue: 0.1), rocket: Color(red: 0.98, green: 0.18, blue: 0.56), rocketDark: Color(red: 0.42, green: 0.04, blue: 0.23), rocketLight: Color(red: 1.0, green: 0.55, blue: 0.82), glass: Color(red: 0.18, green: 0.8, blue: 1.0)
+    )
+
+    static let gold = BasePalette(
+        backgroundTop: Color(red: 0.12, green: 0.07, blue: 0.015), backgroundBottom: Color(red: 0.035, green: 0.02, blue: 0.008), nebulaA: .orange.opacity(0.28), nebulaB: .yellow.opacity(0.16), skyline: Color(red: 0.12, green: 0.065, blue: 0.02),
+        tile: Color(red: 0.12, green: 0.085, blue: 0.045), tileTop: Color(red: 0.24, green: 0.16, blue: 0.07), tileBottom: Color(red: 0.045, green: 0.03, blue: 0.015), tileEdge: Color(red: 0.48, green: 0.3, blue: 0.08), pipeDark: Color(red: 0.15, green: 0.09, blue: 0.025), pipeMid: Color(red: 0.55, green: 0.32, blue: 0.07), pipeLight: Color(red: 1.0, green: 0.72, blue: 0.28), copper: Color(red: 0.88, green: 0.48, blue: 0.08), bolt: Color(red: 0.8, green: 0.64, blue: 0.33), powered: .orange, poweredCore: .yellow, spark: Color(red: 1, green: 0.25, blue: 0.04), rocket: Color(red: 1, green: 0.55, blue: 0.05), rocketDark: Color(red: 0.46, green: 0.18, blue: 0.01), rocketLight: Color(red: 1, green: 0.85, blue: 0.36), glass: Color(red: 1, green: 0.78, blue: 0.26)
+    )
+
+    static let violet = BasePalette(
+        backgroundTop: Color(red: 0.08, green: 0.025, blue: 0.17), backgroundBottom: Color(red: 0.02, green: 0.008, blue: 0.06), nebulaA: .purple.opacity(0.38), nebulaB: .pink.opacity(0.2), skyline: Color(red: 0.08, green: 0.025, blue: 0.13),
+        tile: Color(red: 0.10, green: 0.055, blue: 0.14), tileTop: Color(red: 0.19, green: 0.10, blue: 0.28), tileBottom: Color(red: 0.04, green: 0.02, blue: 0.07), tileEdge: Color(red: 0.40, green: 0.20, blue: 0.58), pipeDark: Color(red: 0.11, green: 0.04, blue: 0.16), pipeMid: Color(red: 0.42, green: 0.15, blue: 0.58), pipeLight: Color(red: 0.78, green: 0.46, blue: 1.0), copper: Color(red: 0.72, green: 0.30, blue: 0.78), bolt: Color(red: 0.62, green: 0.48, blue: 0.75), powered: Color(red: 0.86, green: 0.16, blue: 1), poweredCore: Color(red: 1, green: 0.68, blue: 1), spark: Color(red: 1, green: 0.18, blue: 0.64), rocket: Color(red: 0.63, green: 0.16, blue: 0.96), rocketDark: Color(red: 0.26, green: 0.04, blue: 0.42), rocketLight: Color(red: 0.88, green: 0.52, blue: 1), glass: Color(red: 0.45, green: 0.75, blue: 1)
+    )
+
+    static let chrome = BasePalette(
+        backgroundTop: Color(red: 0.015, green: 0.075, blue: 0.16), backgroundBottom: Color(red: 0.005, green: 0.02, blue: 0.05), nebulaA: .cyan.opacity(0.28), nebulaB: .blue.opacity(0.24), skyline: Color(red: 0.02, green: 0.08, blue: 0.15),
+        tile: Color(red: 0.055, green: 0.09, blue: 0.13), tileTop: Color(red: 0.12, green: 0.18, blue: 0.24), tileBottom: Color(red: 0.025, green: 0.045, blue: 0.07), tileEdge: Color(red: 0.22, green: 0.42, blue: 0.56), pipeDark: Color(red: 0.06, green: 0.10, blue: 0.14), pipeMid: Color(red: 0.32, green: 0.48, blue: 0.58), pipeLight: Color(red: 0.75, green: 0.92, blue: 1), copper: Color(red: 0.27, green: 0.62, blue: 0.82), bolt: Color(red: 0.62, green: 0.76, blue: 0.85), powered: Color(red: 0.08, green: 0.65, blue: 1), poweredCore: Color(red: 0.65, green: 0.95, blue: 1), spark: Color(red: 0.12, green: 0.78, blue: 1), rocket: Color(red: 0.08, green: 0.45, blue: 1), rocketDark: Color(red: 0.02, green: 0.16, blue: 0.42), rocketLight: Color(red: 0.48, green: 0.80, blue: 1), glass: Color(red: 0.55, green: 0.95, blue: 1)
+    )
 }

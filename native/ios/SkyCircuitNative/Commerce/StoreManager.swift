@@ -8,7 +8,7 @@ final class StoreManager {
     var hasPlus = false
     var lastError: String?
 
-    private let productIDs = ["com.skycircuit.plus.monthly", "com.skycircuit.plus.lifetime"]
+    private let productIDs = ["com.skycircuit.plus.weekly", "com.skycircuit.plus.monthly"]
     private var observerTask: Task<Void, Never>?
 
     init() {

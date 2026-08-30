@@ -4,11 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class GameEngine {
-    enum Phase: String, Sendable {
-        case playing
-        case paused
-        case gameOver
-    }
+    enum Phase: String, Sendable { case playing, paused, gameOver }
 
     var phase: Phase = .playing
     var score = 0
@@ -16,66 +12,345 @@ final class GameEngine {
     var streak = 1
     var rank = 42
     var dailyProgress = 0.0
-    var renderMilliseconds = 0.0
+    var level = 1
+    var launched = 0
+    var best = 0
+    var mode: GameMode = .classic
+    var theme: CircuitTheme = .classic
+    var timeLeft: Double? = 70
+    var tiles: [CircuitTile] = []
+    var burnAnimation: BurnAnimation?
+    var status = "Rotate tiles and connect a spark to a rocket."
 
-    let scene = GameScene(size: CGSize(width: 768, height: 720))
     let store = StoreManager()
 
     private let haptics = HapticEngine()
     private let audio = ProceduralAudioEngine()
     private let liveActivity = DailyRunActivityManager()
+    private var lastFrameAt: TimeInterval?
+    private var countdownRemaining: Double?
+    private let rows = 8
+    private let columns = 8
+
+    var target: Int { mode.target + max(0, level - 1) * 2 }
 
     init() {
-        scene.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        scene.onRotationQuality = { [weak self] quality in
-            self?.registerRotation(quality: quality)
+        best = UserDefaults.standard.integer(forKey: "skycircuit.native.best")
+        streak = max(1, UserDefaults.standard.integer(forKey: "skycircuit.native.streak"))
+        if let saved = UserDefaults.standard.string(forKey: "skycircuit.native.theme"),
+           let restored = CircuitTheme(rawValue: saved) {
+            theme = restored
         }
-        scene.onLaunch = { [weak self] in
-            self?.registerLaunch()
-        }
+        restart()
     }
 
     func togglePause() {
+        guard burnAnimation == nil else { return }
+        guard phase != .gameOver else { return }
         phase = phase == .paused ? .playing : .paused
+        status = phase == .paused ? "Game paused." : "Circuit online."
+        lastFrameAt = nil
     }
 
     func restart() {
         phase = .playing
         score = 0
         combo = 1
+        launched = 0
+        level = 1
         dailyProgress = 0
+        timeLeft = mode.initialTime
+        countdownRemaining = mode.initialTime
+        burnAnimation = nil
+        tiles = Self.makeBoard(count: rows * columns)
+        status = "Rotate tiles and connect a spark to a rocket."
+        lastFrameAt = nil
+    }
+
+    func setMode(_ nextMode: GameMode) {
+        guard nextMode == .classic || store.hasPlus else { return }
+        mode = nextMode
+        restart()
+    }
+
+    func setTheme(_ nextTheme: CircuitTheme) {
+        guard !nextTheme.requiresPlus || store.hasPlus else { return }
+        theme = nextTheme
+        UserDefaults.standard.set(nextTheme.rawValue, forKey: "skycircuit.native.theme")
+    }
+
+    func rotateTile(row: Int, column: Int, at now: TimeInterval) {
+        guard phase == .playing, burnAnimation == nil else { return }
+        guard let index = index(row: row, column: column) else { return }
+        tiles[index].rotateClockwise()
+        let quality = connectionQuality(row: row, column: column)
+        haptics.playPlacement(quality: quality)
+        audio.playPlacement(quality: quality)
+        resolveAfterRotation(at: now)
+    }
+
+    func advanceFrame(at now: TimeInterval) {
+        advanceTimer(at: now)
+        guard var burn = burnAnimation else { return }
+        switch burn.phase {
+        case .burning:
+            guard now - burn.startedAt >= burnDuration(burn.solution) else { return }
+            burn.phase = .launching
+            burn.launchStartedAt = now
+            burnAnimation = burn
+            beginLaunch(burn.solution)
+        case .launching:
+            guard let started = burn.launchStartedAt, now - started >= 0.72 else { return }
+            finishLaunch(burn.solution, at: now)
+        }
+    }
+
+    func renderFrame(at now: TimeInterval) -> CircuitRenderFrame {
+        guard let burn = burnAnimation else { return Self.emptyRenderFrame }
+        if burn.phase == .launching { return launchingFrame(burn, at: now) }
+        return burningFrame(burn, at: now)
     }
 
     func startDailyRun() {
+        refreshDailyStreak()
         phase = .playing
         dailyProgress = 0
         liveActivity.start(streak: streak, score: score, rank: rank)
     }
 
-    func finishDailyRun() {
-        phase = .gameOver
-        dailyProgress = 1
-        Task { await liveActivity.finish(streak: streak, score: score, rank: rank) }
-    }
-
-    private func registerRotation(quality: Double) {
-        haptics.playPlacement(quality: quality)
-        audio.playPlacement(quality: quality)
-        if quality > 0.92 {
-            score += 10 * combo
-            dailyProgress = min(1, dailyProgress + 0.04)
-        } else {
+    private func resolveAfterRotation(at now: TimeInterval) {
+        let solution = resolveLaunch()
+        guard !solution.rocketRows.isEmpty else {
             combo = 1
+            status = "Keep rotating. Build a complete circuit."
+            return
         }
-        Task {
-            await liveActivity.update(streak: streak, score: score, rank: rank, progress: dailyProgress)
-        }
+        burnAnimation = BurnAnimation(solution: solution, startedAt: now)
+        status = "Circuit complete. Ignition traveling through the pipes."
     }
 
-    private func registerLaunch() {
+    private func beginLaunch(_ solution: LaunchSolution) {
+        let rocketCount = solution.rocketRows.count
+        score += rocketCount * 100 + max(0, rocketCount - 1) * 175 + solution.burned.count * 5
+        launched += rocketCount
         combo = min(combo + 1, 9)
-        score += 100 * combo
+        dailyProgress = min(1, dailyProgress + Double(rocketCount) / Double(max(target, 1)))
         haptics.playLaunch(combo: combo)
         audio.playLaunch(combo: combo)
+        status = rocketCount > 1 ? "\(rocketCount) rockets launched. Combo ×\(combo)." : "Rocket launched. Combo ×\(combo)."
+        updateBestIfNeeded()
+        Task { await liveActivity.update(streak: streak, score: score, rank: rank, progress: dailyProgress) }
     }
+
+    private func finishLaunch(_ solution: LaunchSolution, at now: TimeInterval) {
+        consume(solution.burned)
+        burnAnimation = nil
+        if launched >= target {
+            level += 1
+            launched = 0
+            tiles = Self.makeBoard(count: rows * columns)
+            status = "Level \(level). New circuit online."
+            return
+        }
+        let cascade = resolveLaunch()
+        guard !cascade.rocketRows.isEmpty else { return }
+        burnAnimation = BurnAnimation(solution: cascade, startedAt: now)
+    }
+
+    private func advanceTimer(at now: TimeInterval) {
+        defer { lastFrameAt = now }
+        guard phase == .playing, burnAnimation == nil, var remaining = countdownRemaining else { return }
+        guard let previous = lastFrameAt else { return }
+        remaining = max(0, remaining - min(0.05, now - previous))
+        countdownRemaining = remaining
+        publishTimerIfNeeded(remaining)
+        guard remaining == 0 else { return }
+        phase = .gameOver
+        status = "Time expired. Start a new game to try again."
+    }
+
+    private func publishTimerIfNeeded(_ remaining: Double) {
+        let visibleSecond = Int(ceil(remaining))
+        let publishedSecond = timeLeft.map { Int(ceil($0)) }
+        guard visibleSecond != publishedSecond || remaining == 0 else { return }
+        timeLeft = remaining
+    }
+
+    private func updateBestIfNeeded() {
+        guard score > best else { return }
+        best = score
+        UserDefaults.standard.set(best, forKey: "skycircuit.native.best")
+    }
+
+    private func refreshDailyStreak() {
+        let defaults = UserDefaults.standard
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: .now)
+        let lastRun = defaults.object(forKey: "skycircuit.native.lastDaily") as? Date
+        guard let lastRun else { return saveDailyStreak(today: today, value: 1) }
+        guard !calendar.isDate(lastRun, inSameDayAs: today) else { return }
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)
+        let nextStreak = yesterday.map { calendar.isDate(lastRun, inSameDayAs: $0) } == true ? streak + 1 : 1
+        saveDailyStreak(today: today, value: nextStreak)
+    }
+
+    private func saveDailyStreak(today: Date, value: Int) {
+        streak = value
+        UserDefaults.standard.set(today, forKey: "skycircuit.native.lastDaily")
+        UserDefaults.standard.set(value, forKey: "skycircuit.native.streak")
+    }
+
+    private func burningFrame(_ burn: BurnAnimation, at now: TimeInterval) -> CircuitRenderFrame {
+        let raw = max(0, now - burn.startedAt) / 0.24
+        let completed = min(burn.solution.burnStages.count, Int(floor(raw)))
+        let active = completed < burn.solution.burnStages.count ? completed : -1
+        let powered = Set(burn.solution.burnStages.prefix(completed).flatMap { $0 })
+        let burning = active >= 0 ? Set(burn.solution.burnStages[active]) : []
+        let next = active + 1 < burn.solution.burnStages.count ? Set(burn.solution.burnStages[active + 1]) : []
+        return CircuitRenderFrame(powered: powered, burning: burning, nextStage: next, rocketRows: [], stageProgress: active >= 0 ? raw - floor(raw) : 1, launchProgress: 0)
+    }
+
+    private func launchingFrame(_ burn: BurnAnimation, at now: TimeInterval) -> CircuitRenderFrame {
+        let started = burn.launchStartedAt ?? now
+        let progress = min(1, max(0, (now - started) / 0.42))
+        return CircuitRenderFrame(powered: burn.solution.burned, burning: [], nextStage: [], rocketRows: Set(burn.solution.rocketRows), stageProgress: 1, launchProgress: progress)
+    }
+
+    private func burnDuration(_ solution: LaunchSolution) -> Double {
+        Double(max(1, solution.burnStages.count)) * 0.24
+    }
+
+    private func connectionQuality(row: Int, column: Int) -> Double {
+        guard let tile = tile(row: row, column: column) else { return 0 }
+        let edges = CircuitDirection.all.filter { tile.connections.contains($0) }
+        guard !edges.isEmpty else { return 0 }
+        let valid = edges.filter { isMutuallyConnected(row: row, column: column, direction: $0) }.count
+        return Double(valid) / Double(edges.count)
+    }
+
+    private func resolveLaunch() -> LaunchSolution {
+        var accepted: Set<CircuitCell> = []
+        var rocketRows: Set<Int> = []
+        var distance: [CircuitCell: Int] = [:]
+        var globallyVisited: Set<CircuitCell> = []
+
+        for row in 0..<rows {
+            let source = CircuitCell(row: row, column: 0)
+            guard tile(row: row, column: 0)?.connections.contains(.west) == true else { continue }
+            guard !globallyVisited.contains(source) else { continue }
+            let component = connectedComponent(from: source)
+            globallyVisited.formUnion(component.cells)
+            guard !component.rocketRows.isEmpty else { continue }
+            accepted.formUnion(component.cells)
+            rocketRows.formUnion(component.rocketRows)
+            mergeDistances(component.distances, into: &distance)
+        }
+
+        let stages = makeStages(cells: accepted, distances: distance)
+        return LaunchSolution(burned: accepted, rocketRows: rocketRows.sorted(), burnStages: stages)
+    }
+
+    private func connectedComponent(from source: CircuitCell) -> (cells: Set<CircuitCell>, rocketRows: Set<Int>, distances: [CircuitCell: Int]) {
+        var queue = [source]
+        var cursor = 0
+        var cells: Set<CircuitCell> = [source]
+        var rockets: Set<Int> = []
+        var distances: [CircuitCell: Int] = [source: 0]
+
+        while cursor < queue.count {
+            let cell = queue[cursor]
+            cursor += 1
+            if reachesRocket(cell) { rockets.insert(cell.row) }
+            for next in neighbors(of: cell) where !cells.contains(next) {
+                cells.insert(next)
+                distances[next] = (distances[cell] ?? 0) + 1
+                queue.append(next)
+            }
+        }
+        return (cells, rockets, distances)
+    }
+
+    private func neighbors(of cell: CircuitCell) -> [CircuitCell] {
+        guard let current = tile(row: cell.row, column: cell.column) else { return [] }
+        return CircuitDirection.all.compactMap { direction in
+            guard current.connections.contains(direction) else { return nil }
+            guard let next = adjacent(to: cell, direction: direction) else { return nil }
+            guard tile(row: next.row, column: next.column)?.connections.contains(direction.opposite) == true else { return nil }
+            return next
+        }
+    }
+
+    private func reachesRocket(_ cell: CircuitCell) -> Bool {
+        guard cell.column == columns - 1 else { return false }
+        return tile(row: cell.row, column: cell.column)?.connections.contains(.east) == true
+    }
+
+    private func adjacent(to cell: CircuitCell, direction: CircuitDirection) -> CircuitCell? {
+        let candidate: CircuitCell
+        switch direction {
+        case .north: candidate = CircuitCell(row: cell.row - 1, column: cell.column)
+        case .east: candidate = CircuitCell(row: cell.row, column: cell.column + 1)
+        case .south: candidate = CircuitCell(row: cell.row + 1, column: cell.column)
+        default: candidate = CircuitCell(row: cell.row, column: cell.column - 1)
+        }
+        guard candidate.row >= 0, candidate.row < rows, candidate.column >= 0, candidate.column < columns else { return nil }
+        return candidate
+    }
+
+    private func isMutuallyConnected(row: Int, column: Int, direction: CircuitDirection) -> Bool {
+        let cell = CircuitCell(row: row, column: column)
+        if direction == .west, column == 0 { return true }
+        if direction == .east, column == columns - 1 { return true }
+        guard let next = adjacent(to: cell, direction: direction) else { return false }
+        return tile(row: next.row, column: next.column)?.connections.contains(direction.opposite) == true
+    }
+
+    private func consume(_ burned: Set<CircuitCell>) {
+        guard !burned.isEmpty else { return }
+        for column in 0..<columns {
+            let survivors = (0..<rows).compactMap { row -> CircuitTile? in
+                let cell = CircuitCell(row: row, column: column)
+                return burned.contains(cell) ? nil : tile(row: row, column: column)
+            }
+            let refill = Self.makeBoard(count: rows - survivors.count)
+            let nextColumn = refill + survivors
+            for row in 0..<rows { tiles[row * columns + column] = nextColumn[row] }
+        }
+    }
+
+    private func mergeDistances(_ source: [CircuitCell: Int], into target: inout [CircuitCell: Int]) {
+        for (cell, value) in source { target[cell] = min(target[cell] ?? value, value) }
+    }
+
+    private func makeStages(cells: Set<CircuitCell>, distances: [CircuitCell: Int]) -> [[CircuitCell]] {
+        let maxDistance = cells.compactMap { distances[$0] }.max() ?? -1
+        guard maxDistance >= 0 else { return [] }
+        return (0...maxDistance).map { distance in
+            cells.filter { distances[$0] == distance }.sorted { ($0.row, $0.column) < ($1.row, $1.column) }
+        }
+    }
+
+    private func tile(row: Int, column: Int) -> CircuitTile? {
+        guard let index = index(row: row, column: column) else { return nil }
+        return tiles[index]
+    }
+
+    private func index(row: Int, column: Int) -> Int? {
+        guard row >= 0, row < rows, column >= 0, column < columns else { return nil }
+        return row * columns + column
+    }
+
+    private static func makeBoard(count: Int) -> [CircuitTile] {
+        let pool: [CircuitDirection] = [
+            [.north, .south], [.north, .south], [.north, .east], [.north, .east],
+            [.north, .east], [.north, .east, .south], [.north, .east, .south, .west],
+        ]
+        return (0..<count).map { _ in
+            var tile = CircuitTile(connections: pool.randomElement() ?? [.north, .east])
+            for _ in 0..<Int.random(in: 0...3) { tile.rotateClockwise() }
+            return tile
+        }
+    }
+
+    private static let emptyRenderFrame = CircuitRenderFrame(powered: [], burning: [], nextStage: [], rocketRows: [], stageProgress: 0, launchProgress: 0)
 }

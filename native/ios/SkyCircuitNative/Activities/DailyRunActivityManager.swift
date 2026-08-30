@@ -4,13 +4,19 @@ import Foundation
 @MainActor
 final class DailyRunActivityManager {
     private var activityID: String?
+    private(set) var lastError: String?
 
     func start(streak: Int, score: Int, rank: Int) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let attributes = DailyRunAttributes(runID: UUID(), startedAt: .now)
         let state = DailyRunAttributes.ContentState(streak: streak, score: score, rank: rank, progress: 0)
         let content = ActivityContent(state: state, staleDate: nil)
-        activityID = try? Activity.request(attributes: attributes, content: content, pushType: nil).id
+        do {
+            activityID = try Activity.request(attributes: attributes, content: content, pushType: nil).id
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
     }
 
     func update(streak: Int, score: Int, rank: Int, progress: Double) async {
