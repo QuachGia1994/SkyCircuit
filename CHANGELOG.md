@@ -10,7 +10,8 @@
 - Original SkyCircuit app-icon source and Capacitor native icon generation in Android/iOS workflows.
 - Static build pipeline and Capacitor configuration for Android and iOS packaging.
 - Behavior-level tests for board rotation, connectivity, component isolation, staged ignition, multi-source ignition, and collapse/refill.
-- Experimental Native V2 sidecars without replacing the Capacitor build: iOS SwiftUI + SpriteKit/SpriteView + CoreHaptics + AVAudioEngine + ActivityKit + StoreKit 2, and Android Jetpack Compose + SurfaceView Canvas + rich VibrationEffect + promoted Daily Run notification + Glance + Play Billing.
+- Experimental Native V2 sidecars without replacing the Capacitor build: iOS SwiftUI + Canvas/TimelineView + CoreHaptics + AVAudioEngine + ActivityKit + StoreKit 2, and Android Jetpack Compose + SurfaceView Canvas + rich VibrationEffect + promoted Daily Run notification + Glance + Play Billing.
+- Native iOS asset catalog with a real SkyCircuit AppIcon and branded startup splash, plus an unsigned full-access beta build channel that unlocks Plus themes and modes without production StoreKit configuration.
 - Shared Native V2 contract for Daily Run streak/rank surfaces, Plus entitlement boundaries, 120 Hz render target under 8.3 ms, and an under-25 MB procedural/vector asset budget.
 - Experimental Native V2 CI workflows for Xcode 27 and Android API 37/AGP 9.3.
 
@@ -21,3 +22,4 @@
 - Plus/tutorial previews now use theme-aware rocket and ignition artwork instead of flat triangle glyphs, and page atmosphere follows the active skin.
 - Reduced mobile canvas cost by capping DPR at 2, removing per-particle blur, guarding HUD DOM writes, and adding iOS glass-filter and resize handling.
 - Cascade launches now expose an explicit combo chain in the HUD and scoring flow.
+- Native iOS rocket resolution now pairs each left source row to its matching right rocket row; one completed route launches one paired rocket, while multiple independently completed rows may still multi-launch.

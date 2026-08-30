@@ -371,9 +371,9 @@ struct PlusStoreView: View {
             Text("SkyCircuit Plus")
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(LinearGradient(colors: [.white, ThemeChrome(theme: engine.theme).gold], startPoint: .leading, endPoint: .trailing))
-            Text("Premium themes • early modes • no ads")
+            Text(engine.store.isBetaUnlocked ? "BETA FULL ACCESS • all themes & modes unlocked" : "Premium themes • early modes • no ads")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(engine.store.isBetaUnlocked ? ThemeChrome(theme: engine.theme).cyan : .white.opacity(0.62))
         }
     }
 
@@ -425,7 +425,14 @@ struct PlusStoreView: View {
 
     @ViewBuilder
     private var products: some View {
-        if engine.store.products.isEmpty {
+        if engine.store.isBetaUnlocked {
+            Label("BETA FULL ACCESS ENABLED", systemImage: "checkmark.seal.fill")
+                .font(.caption.weight(.black))
+                .foregroundStyle(ThemeChrome(theme: engine.theme).cyan)
+                .padding(14)
+                .frame(maxWidth: .infinity)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        } else if engine.store.products.isEmpty {
             Text("Weekly/monthly StoreKit products are not configured in this test environment yet.")
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.56))

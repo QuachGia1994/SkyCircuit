@@ -231,43 +231,57 @@ final class GameEngine {
     private func resolveLaunch() -> LaunchSolution {
         var accepted: Set<CircuitCell> = []
         var rocketRows: Set<Int> = []
-        var distance: [CircuitCell: Int] = [:]
-        var globallyVisited: Set<CircuitCell> = []
+        var distances: [CircuitCell: Int] = [:]
 
         for row in 0..<rows {
             let source = CircuitCell(row: row, column: 0)
             guard tile(row: row, column: 0)?.connections.contains(.west) == true else { continue }
-            guard !globallyVisited.contains(source) else { continue }
-            let component = connectedComponent(from: source)
-            globallyVisited.formUnion(component.cells)
-            guard !component.rocketRows.isEmpty else { continue }
-            accepted.formUnion(component.cells)
-            rocketRows.formUnion(component.rocketRows)
-            mergeDistances(component.distances, into: &distance)
+            guard let path = pairedRocketPath(from: source) else { continue }
+            rocketRows.insert(row)
+            mergePath(path, into: &accepted, distances: &distances)
         }
 
-        let stages = makeStages(cells: accepted, distances: distance)
+        let stages = makeStages(cells: accepted, distances: distances)
         return LaunchSolution(burned: accepted, rocketRows: rocketRows.sorted(), burnStages: stages)
     }
 
-    private func connectedComponent(from source: CircuitCell) -> (cells: Set<CircuitCell>, rocketRows: Set<Int>, distances: [CircuitCell: Int]) {
+    private func pairedRocketPath(from source: CircuitCell) -> [CircuitCell]? {
+        let target = CircuitCell(row: source.row, column: columns - 1)
+        guard tile(row: target.row, column: target.column)?.connections.contains(.east) == true else { return nil }
         var queue = [source]
         var cursor = 0
-        var cells: Set<CircuitCell> = [source]
-        var rockets: Set<Int> = []
-        var distances: [CircuitCell: Int] = [source: 0]
+        var visited: Set<CircuitCell> = [source]
+        var parent: [CircuitCell: CircuitCell] = [:]
 
         while cursor < queue.count {
             let cell = queue[cursor]
             cursor += 1
-            if reachesRocket(cell) { rockets.insert(cell.row) }
-            for next in neighbors(of: cell) where !cells.contains(next) {
-                cells.insert(next)
-                distances[next] = (distances[cell] ?? 0) + 1
+            if cell == target { return reconstructPath(from: source, to: target, parent: parent) }
+            for next in neighbors(of: cell) where !visited.contains(next) {
+                visited.insert(next)
+                parent[next] = cell
                 queue.append(next)
             }
         }
-        return (cells, rockets, distances)
+        return nil
+    }
+
+    private func reconstructPath(from source: CircuitCell, to target: CircuitCell, parent: [CircuitCell: CircuitCell]) -> [CircuitCell]? {
+        var current = target
+        var path = [target]
+        while current != source {
+            guard let previous = parent[current] else { return nil }
+            path.append(previous)
+            current = previous
+        }
+        return Array(path.reversed())
+    }
+
+    private func mergePath(_ path: [CircuitCell], into cells: inout Set<CircuitCell>, distances: inout [CircuitCell: Int]) {
+        for (distance, cell) in path.enumerated() {
+            cells.insert(cell)
+            distances[cell] = min(distances[cell] ?? distance, distance)
+        }
     }
 
     private func neighbors(of cell: CircuitCell) -> [CircuitCell] {
@@ -278,11 +292,6 @@ final class GameEngine {
             guard tile(row: next.row, column: next.column)?.connections.contains(direction.opposite) == true else { return nil }
             return next
         }
-    }
-
-    private func reachesRocket(_ cell: CircuitCell) -> Bool {
-        guard cell.column == columns - 1 else { return false }
-        return tile(row: cell.row, column: cell.column)?.connections.contains(.east) == true
     }
 
     private func adjacent(to cell: CircuitCell, direction: CircuitDirection) -> CircuitCell? {
@@ -316,10 +325,6 @@ final class GameEngine {
             let nextColumn = refill + survivors
             for row in 0..<rows { tiles[row * columns + column] = nextColumn[row] }
         }
-    }
-
-    private func mergeDistances(_ source: [CircuitCell: Int], into target: inout [CircuitCell: Int]) {
-        for (cell, value) in source { target[cell] = min(target[cell] ?? value, value) }
     }
 
     private func makeStages(cells: Set<CircuitCell>, distances: [CircuitCell: Int]) -> [[CircuitCell]] {

@@ -5,19 +5,27 @@ import StoreKit
 @Observable
 final class StoreManager {
     var products: [Product] = []
-    var hasPlus = false
+    var hasPlus = Self.betaUnlocked
     var lastError: String?
 
     private let productIDs = ["com.skycircuit.plus.weekly", "com.skycircuit.plus.monthly"]
     private var observerTask: Task<Void, Never>?
 
+    var isBetaUnlocked: Bool { Self.betaUnlocked }
+
     init() {
+        guard !Self.betaUnlocked else { return }
         observerTask = Task { [weak self] in
             await self?.observeTransactions()
         }
     }
 
     func loadProducts() async {
+        guard !Self.betaUnlocked else {
+            hasPlus = true
+            lastError = nil
+            return
+        }
         do {
             products = try await Product.products(for: productIDs)
             await refreshEntitlements()
@@ -27,6 +35,10 @@ final class StoreManager {
     }
 
     func refreshEntitlements() async {
+        guard !Self.betaUnlocked else {
+            hasPlus = true
+            return
+        }
         var plus = false
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
@@ -44,5 +56,13 @@ final class StoreManager {
             await transaction.finish()
             await refreshEntitlements()
         }
+    }
+
+    private static var betaUnlocked: Bool {
+#if SKYCIRCUIT_BETA
+        true
+#else
+        false
+#endif
     }
 }
