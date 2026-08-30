@@ -63,7 +63,11 @@ enum GameMode: String, CaseIterable, Identifiable, Sendable {
     case blitz
 
     var id: String { rawValue }
-    var title: String { rawValue.uppercased() }
+
+    func title(language: AppLanguage) -> String {
+        L10n.text("mode_\(rawValue)", language: language)
+    }
+
     var initialTime: Double? { self == .zen ? nil : self == .blitz ? 45 : 70 }
     var target: Int { self == .blitz ? 12 : 8 }
 }
@@ -76,13 +80,15 @@ enum CircuitTheme: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(language: AppLanguage) -> String {
+        let key: String
         switch self {
-        case .classic: "Classic"
-        case .novaGold: "Nova Gold"
-        case .nebulaViolet: "Nebula Violet"
-        case .plasmaChrome: "Plasma Chrome"
+        case .classic: key = "theme_classic"
+        case .novaGold: key = "theme_nova_gold"
+        case .nebulaViolet: key = "theme_nebula_violet"
+        case .plasmaChrome: key = "theme_plasma_chrome"
         }
+        return L10n.text(key, language: language)
     }
 
     var requiresPlus: Bool { self != .classic }

@@ -20,7 +20,11 @@ final class GameEngine {
     var timeLeft: Double? = 70
     var tiles: [CircuitTile] = []
     var burnAnimation: BurnAnimation?
-    var status = "Rotate tiles and connect a spark to a rocket."
+    var language: AppLanguage = .english
+    var musicEnabled = true
+    var soundEffectsEnabled = true
+    var hapticsEnabled = true
+    var status = ""
 
     let store = StoreManager()
 
@@ -35,12 +39,23 @@ final class GameEngine {
     var target: Int { mode.target + max(0, level - 1) * 2 }
 
     init() {
-        best = UserDefaults.standard.integer(forKey: "skycircuit.native.best")
-        streak = max(1, UserDefaults.standard.integer(forKey: "skycircuit.native.streak"))
-        if let saved = UserDefaults.standard.string(forKey: "skycircuit.native.theme"),
-           let restored = CircuitTheme(rawValue: saved) {
-            theme = restored
+        let defaults = UserDefaults.standard
+        best = defaults.integer(forKey: "skycircuit.native.best")
+        streak = max(1, defaults.integer(forKey: "skycircuit.native.streak"))
+        if let savedLanguage = defaults.string(forKey: "skycircuit.native.language"),
+           let restoredLanguage = AppLanguage(rawValue: savedLanguage) {
+            language = restoredLanguage
         }
+        if let savedTheme = defaults.string(forKey: "skycircuit.native.theme"),
+           let restoredTheme = CircuitTheme(rawValue: savedTheme) {
+            theme = restoredTheme
+        }
+        musicEnabled = defaults.object(forKey: "skycircuit.native.music") as? Bool ?? true
+        soundEffectsEnabled = defaults.object(forKey: "skycircuit.native.effects") as? Bool ?? true
+        hapticsEnabled = defaults.object(forKey: "skycircuit.native.haptics") as? Bool ?? true
+        audio.setMusicEnabled(musicEnabled)
+        audio.setEffectsEnabled(soundEffectsEnabled)
+        haptics.setEnabled(hapticsEnabled)
         restart()
     }
 
@@ -48,7 +63,7 @@ final class GameEngine {
         guard burnAnimation == nil else { return }
         guard phase != .gameOver else { return }
         phase = phase == .paused ? .playing : .paused
-        status = phase == .paused ? "Game paused." : "Circuit online."
+        status = L10n.text(phase == .paused ? "status_paused" : "status_online", language: language)
         lastFrameAt = nil
     }
 
@@ -63,7 +78,8 @@ final class GameEngine {
         countdownRemaining = mode.initialTime
         burnAnimation = nil
         tiles = Self.makeBoard(count: rows * columns)
-        status = "Rotate tiles and connect a spark to a rocket."
+        status = L10n.text("status_connect", language: language)
+        audio.setMusicEnergy(combo: combo, igniting: false)
         lastFrameAt = nil
     }
 
@@ -77,6 +93,42 @@ final class GameEngine {
         guard !nextTheme.requiresPlus || store.hasPlus else { return }
         theme = nextTheme
         UserDefaults.standard.set(nextTheme.rawValue, forKey: "skycircuit.native.theme")
+    }
+
+    func setLanguage(_ nextLanguage: AppLanguage) {
+        language = nextLanguage
+        UserDefaults.standard.set(nextLanguage.rawValue, forKey: "skycircuit.native.language")
+        refreshLocalizedStatus()
+    }
+
+    func setMusicEnabled(_ enabled: Bool) {
+        musicEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "skycircuit.native.music")
+        audio.setMusicEnabled(enabled)
+    }
+
+    func setSoundEffectsEnabled(_ enabled: Bool) {
+        soundEffectsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "skycircuit.native.effects")
+        audio.setEffectsEnabled(enabled)
+    }
+
+    func setHapticsEnabled(_ enabled: Bool) {
+        hapticsEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "skycircuit.native.haptics")
+        haptics.setEnabled(enabled)
+    }
+
+    private func refreshLocalizedStatus() {
+        if phase == .gameOver {
+            status = L10n.text("status_time_expired", language: language)
+        } else if phase == .paused {
+            status = L10n.text("status_paused", language: language)
+        } else if burnAnimation != nil {
+            status = L10n.text("status_ignition", language: language)
+        } else {
+            status = L10n.text("status_connect", language: language)
+        }
     }
 
     func rotateTile(row: Int, column: Int, at now: TimeInterval) {
@@ -122,11 +174,13 @@ final class GameEngine {
         let solution = resolveLaunch()
         guard !solution.rocketRows.isEmpty else {
             combo = 1
-            status = "Keep rotating. Build a complete circuit."
+            audio.setMusicEnergy(combo: combo, igniting: false)
+            status = L10n.text("status_keep_rotating", language: language)
             return
         }
         burnAnimation = BurnAnimation(solution: solution, startedAt: now)
-        status = "Circuit complete. Ignition traveling through the pipes."
+        audio.setMusicEnergy(combo: combo, igniting: true)
+        status = L10n.text("status_ignition", language: language)
     }
 
     private func beginLaunch(_ solution: LaunchSolution) {
@@ -137,7 +191,10 @@ final class GameEngine {
         dailyProgress = min(1, dailyProgress + Double(rocketCount) / Double(max(target, 1)))
         haptics.playLaunch(combo: combo)
         audio.playLaunch(combo: combo)
-        status = rocketCount > 1 ? "\(rocketCount) rockets launched. Combo ×\(combo)." : "Rocket launched. Combo ×\(combo)."
+        audio.setMusicEnergy(combo: combo, igniting: true)
+        status = rocketCount > 1
+            ? L10n.format("status_rocket_multi_format", language: language, rocketCount, combo)
+            : L10n.format("status_rocket_single_format", language: language, combo)
         updateBestIfNeeded()
         Task { await liveActivity.update(streak: streak, score: score, rank: rank, progress: dailyProgress) }
     }
@@ -145,11 +202,12 @@ final class GameEngine {
     private func finishLaunch(_ solution: LaunchSolution, at now: TimeInterval) {
         consume(solution.burned)
         burnAnimation = nil
+        audio.setMusicEnergy(combo: combo, igniting: false)
         if launched >= target {
             level += 1
             launched = 0
             tiles = Self.makeBoard(count: rows * columns)
-            status = "Level \(level). New circuit online."
+            status = L10n.format("status_level_format", language: language, level)
             return
         }
         let cascade = resolveLaunch()
@@ -166,7 +224,7 @@ final class GameEngine {
         publishTimerIfNeeded(remaining)
         guard remaining == 0 else { return }
         phase = .gameOver
-        status = "Time expired. Start a new game to try again."
+        status = L10n.text("status_time_expired", language: language)
     }
 
     private func publishTimerIfNeeded(_ remaining: Double) {

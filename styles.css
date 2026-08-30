@@ -375,6 +375,37 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
 body.modal-open { overflow: hidden; }
 body.modal-open::before,
 body.modal-open::after { visibility: hidden; }
+.settings-layer { display: grid; place-items: center; }
+.settings-panel {
+  width: min(100%, 520px);
+  border: 1px solid rgba(112, 179, 232, .42);
+  border-radius: 26px;
+  padding: 18px;
+  background: linear-gradient(160deg, rgba(14, 39, 72, .98), rgba(4, 13, 27, .99));
+  box-shadow: 0 30px 90px rgba(0,0,0,.64), inset 0 1px 0 rgba(255,255,255,.10);
+}
+.settings-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.settings-header h2 { margin: 0; font-size: 1.55rem; }
+.settings-row {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  color: var(--text);
+  font-weight: 750;
+}
+.settings-row select {
+  max-width: 54%;
+  border: 1px solid rgba(94,219,255,.32);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #07172c;
+  color: var(--text);
+  font: inherit;
+}
+.settings-row input { width: 22px; height: 22px; accent-color: var(--accent); }
 .modal-layer {
   position: fixed;
   z-index: 50;

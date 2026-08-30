@@ -6,6 +6,8 @@ struct GameRootView: View {
     @Bindable var engine: GameEngine
     @State private var showPlus = false
     @State private var showTutorial = false
+    @State private var showSettings = false
+    @State private var showStartup = true
 
     var body: some View {
         ZStack {
@@ -24,10 +26,18 @@ struct GameRootView: View {
                 .padding(.bottom, 24)
             }
         }
+        .overlay {
+            if showStartup { StartupOverlay(theme: engine.theme, language: engine.language) }
+        }
         .preferredColorScheme(.dark)
+        .environment(\.locale, engine.language.locale)
         .sheet(isPresented: $showPlus) { PlusStoreView(engine: engine) }
-        .sheet(isPresented: $showTutorial) { TutorialView(theme: engine.theme) }
+        .sheet(isPresented: $showSettings) { SettingsView(engine: engine) }
+        .fullScreenCover(isPresented: $showTutorial, onDismiss: markTutorialSeen) {
+            TutorialView(theme: engine.theme, language: engine.language)
+        }
         .task { await engine.store.loadProducts() }
+        .task { await dismissStartupAfterDelay() }
     }
 
     private var header: some View {
@@ -35,14 +45,15 @@ struct GameRootView: View {
             brand
             Spacer(minLength: 4)
             iconButton("questionmark", accent: chrome.cyan) { showTutorial = true }
-            Button("PLUS") { showPlus = true }
+            iconButton("gearshape.fill", accent: .white.opacity(0.72)) { showSettings = true }
+            Button(L10n.text("plus", language: engine.language)) { showPlus = true }
                 .buttonStyle(GlassTextButtonStyle(accent: chrome.gold))
         }
     }
 
     private var brand: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("FIREWORK CIRCUIT PUZZLE")
+            Text(L10n.text("firework_tagline", language: engine.language))
                 .font(.system(size: 10, weight: .black, design: .rounded))
                 .tracking(2.4)
                 .foregroundStyle(chrome.gold)
@@ -65,7 +76,7 @@ struct GameRootView: View {
 
     private var modeStrip: some View {
         HStack(spacing: 10) {
-            Label(engine.mode.title, systemImage: "circle.grid.cross")
+            Label(engine.mode.title(language: engine.language), systemImage: "circle.grid.cross")
                 .font(.caption.weight(.black))
                 .tracking(1.1)
                 .foregroundStyle(chrome.gold)
@@ -77,7 +88,7 @@ struct GameRootView: View {
             Button {
                 engine.startDailyRun()
             } label: {
-                Label("DAILY", systemImage: "flame.fill")
+                Label(L10n.text("daily", language: engine.language), systemImage: "flame.fill")
                     .font(.caption.weight(.black))
                     .foregroundStyle(chrome.cyan)
                     .padding(.horizontal, 12)
@@ -94,10 +105,10 @@ struct GameRootView: View {
 
     private var levelBadge: some View {
         VStack(alignment: .trailing, spacing: 2) {
-            Text("LEVEL \(engine.level)")
+            Text(L10n.format("level_format", language: engine.language, engine.level))
                 .font(.caption.weight(.black))
                 .foregroundStyle(.white.opacity(0.86))
-            Text("\(engine.launched)/\(engine.target) ROCKETS")
+            Text(L10n.format("rockets_format", language: engine.language, engine.launched, engine.target))
                 .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.62))
         }
@@ -109,10 +120,10 @@ struct GameRootView: View {
 
     private var hud: some View {
         HStack(spacing: 8) {
-            statCard("SCORE", "\(engine.score)", "star.fill", chrome.gold)
-            statCard("COMBO", "×\(engine.combo)", "bolt.fill", .orange)
-            statCard("TIME", timeText, "timer", chrome.cyan)
-            statCard("BEST", "\(engine.best)", "trophy.fill", .pink)
+            statCard(L10n.text("score", language: engine.language), "\(engine.score)", "star.fill", chrome.gold)
+            statCard(L10n.text("combo", language: engine.language), "×\(engine.combo)", "bolt.fill", .orange)
+            statCard(L10n.text("time", language: engine.language), timeText, "timer", chrome.cyan)
+            statCard(L10n.text("best", language: engine.language), "\(engine.best)", "trophy.fill", .pink)
         }
     }
 
@@ -150,9 +161,9 @@ struct GameRootView: View {
 
     private var controls: some View {
         HStack(spacing: 14) {
-            Button(engine.phase == .paused ? "Resume" : "Pause") { engine.togglePause() }
+            Button(L10n.text(engine.phase == .paused ? "resume" : "pause", language: engine.language)) { engine.togglePause() }
                 .buttonStyle(GameControlStyle(kind: .secondary, accent: chrome.cyan))
-            Button("New Game") { engine.restart() }
+            Button(L10n.text("new_game", language: engine.language)) { engine.restart() }
                 .buttonStyle(GameControlStyle(kind: .primary, accent: chrome.gold))
         }
     }
@@ -191,6 +202,27 @@ struct GameRootView: View {
         .buttonStyle(GlassIconButtonStyle(accent: accent))
     }
 
+    private func dismissStartupAfterDelay() async {
+        do {
+            try await Task.sleep(for: .seconds(1.55))
+        } catch {
+            return
+        }
+        guard showStartup else { return }
+        withAnimation(.easeOut(duration: 0.34)) { showStartup = false }
+        guard !UserDefaults.standard.bool(forKey: "skycircuit.native.tutorialSeen") else { return }
+        do {
+            try await Task.sleep(for: .milliseconds(320))
+        } catch {
+            return
+        }
+        showTutorial = true
+    }
+
+    private func markTutorialSeen() {
+        UserDefaults.standard.set(true, forKey: "skycircuit.native.tutorialSeen")
+    }
+
     private var timeText: String {
         guard let time = engine.timeLeft else { return "∞" }
         return String(max(0, Int(ceil(time))))
@@ -207,7 +239,7 @@ struct GameRootView: View {
     private var chrome: ThemeChrome { ThemeChrome(theme: engine.theme) }
 }
 
-private struct SkyBackground: View {
+struct SkyBackground: View {
     let theme: CircuitTheme
 
     var body: some View {
@@ -253,7 +285,7 @@ private struct SkyBackground: View {
     private var chrome: ThemeChrome { ThemeChrome(theme: theme) }
 }
 
-private struct ThemeChrome {
+struct ThemeChrome {
     let cyan: Color
     let gold: Color
     let violet: Color
@@ -317,7 +349,7 @@ private struct GlassTextButtonStyle: ButtonStyle {
     }
 }
 
-private struct GameControlStyle: ButtonStyle {
+struct GameControlStyle: ButtonStyle {
     enum Kind { case primary, secondary }
     let kind: Kind
     let accent: Color
@@ -368,10 +400,10 @@ struct PlusStoreView: View {
 
     private var plusHeader: some View {
         VStack(spacing: 6) {
-            Text("SkyCircuit Plus")
+            Text(L10n.text("plus_title", language: engine.language))
                 .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(LinearGradient(colors: [.white, ThemeChrome(theme: engine.theme).gold], startPoint: .leading, endPoint: .trailing))
-            Text(engine.store.isBetaUnlocked ? "BETA FULL ACCESS • all themes & modes unlocked" : "Premium themes • early modes • no ads")
+            Text(L10n.text(engine.store.isBetaUnlocked ? "plus_beta_full" : "plus_premium_subtitle", language: engine.language))
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(engine.store.isBetaUnlocked ? ThemeChrome(theme: engine.theme).cyan : .white.opacity(0.62))
         }
@@ -379,10 +411,10 @@ struct PlusStoreView: View {
 
     private var themeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("THEMES & PULSE")
+            sectionTitle(L10n.text("themes_pulse", language: engine.language))
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(CircuitTheme.allCases) { theme in
-                    ThemeCard(theme: theme, selected: engine.theme == theme, unlocked: !theme.requiresPlus || engine.store.hasPlus) {
+                    ThemeCard(theme: theme, language: engine.language, selected: engine.theme == theme, unlocked: !theme.requiresPlus || engine.store.hasPlus) {
                         engine.setTheme(theme)
                     }
                 }
@@ -392,7 +424,7 @@ struct PlusStoreView: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("MODES")
+            sectionTitle(L10n.text("modes", language: engine.language))
             HStack(spacing: 9) {
                 ForEach(GameMode.allCases) { mode in
                     Button {
@@ -400,7 +432,7 @@ struct PlusStoreView: View {
                     } label: {
                         VStack(spacing: 5) {
                             Image(systemName: mode == .classic ? "circle.grid.cross" : mode == .zen ? "leaf.fill" : "bolt.fill")
-                            Text(mode.title).font(.caption2.weight(.black))
+                            Text(mode.title(language: engine.language)).font(.caption2.weight(.black))
                             if mode != .classic && !engine.store.hasPlus { Image(systemName: "lock.fill").font(.caption2) }
                         }
                         .frame(maxWidth: .infinity, minHeight: 74)
@@ -413,12 +445,12 @@ struct PlusStoreView: View {
 
     private var benefitSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("PLUS BENEFITS")
+            sectionTitle(L10n.text("plus_benefits", language: engine.language))
             LazyVGrid(columns: columns, spacing: 10) {
-                benefit("nosign", "NO ADS", "Pure uninterrupted runs")
-                benefit("paintpalette.fill", "EXCLUSIVE SKINS", "Premium metal and pulse sets")
-                benefit("bolt.fill", "EARLY MODES", "Play new modes first")
-                benefit("calendar.badge.clock", "DAILY STREAK", "Expanded recurring rewards")
+                benefit("nosign", "no_ads", "no_ads_body")
+                benefit("paintpalette.fill", "exclusive_skins", "exclusive_skins_body")
+                benefit("bolt.fill", "early_modes", "early_modes_body")
+                benefit("calendar.badge.clock", "daily_streak", "daily_streak_body")
             }
         }
     }
@@ -426,14 +458,14 @@ struct PlusStoreView: View {
     @ViewBuilder
     private var products: some View {
         if engine.store.isBetaUnlocked {
-            Label("BETA FULL ACCESS ENABLED", systemImage: "checkmark.seal.fill")
+            Label(L10n.text("beta_full_access_enabled", language: engine.language), systemImage: "checkmark.seal.fill")
                 .font(.caption.weight(.black))
                 .foregroundStyle(ThemeChrome(theme: engine.theme).cyan)
                 .padding(14)
                 .frame(maxWidth: .infinity)
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16))
         } else if engine.store.products.isEmpty {
-            Text("Weekly/monthly StoreKit products are not configured in this test environment yet.")
+            Text(L10n.text("store_not_configured", language: engine.language))
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.56))
                 .multilineTextAlignment(.center)
@@ -447,11 +479,11 @@ struct PlusStoreView: View {
         }
     }
 
-    private func benefit(_ symbol: String, _ title: String, _ body: String) -> some View {
+    private func benefit(_ symbol: String, _ titleKey: String, _ bodyKey: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Image(systemName: symbol).font(.title2).foregroundStyle(ThemeChrome(theme: engine.theme).gold)
-            Text(title).font(.caption.weight(.black)).foregroundStyle(.white)
-            Text(body).font(.caption2).foregroundStyle(.white.opacity(0.55))
+            Text(L10n.text(titleKey, language: engine.language)).font(.caption.weight(.black)).foregroundStyle(.white)
+            Text(L10n.text(bodyKey, language: engine.language)).font(.caption2).foregroundStyle(.white.opacity(0.55))
         }
         .frame(maxWidth: .infinity, minHeight: 105, alignment: .leading)
         .padding(12)
@@ -466,6 +498,7 @@ struct PlusStoreView: View {
 
 private struct ThemeCard: View {
     let theme: CircuitTheme
+    let language: AppLanguage
     let selected: Bool
     let unlocked: Bool
     let action: () -> Void
@@ -478,8 +511,8 @@ private struct ThemeCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 13))
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(theme.title).font(.caption.weight(.black))
-                        Text(unlocked ? "AVAILABLE" : "PLUS").font(.caption2).foregroundStyle(.white.opacity(0.48))
+                        Text(theme.title(language: language)).font(.caption.weight(.black))
+                        Text(L10n.text(unlocked ? "available" : "plus", language: language)).font(.caption2).foregroundStyle(.white.opacity(0.48))
                     }
                     Spacer()
                     Image(systemName: selected ? "checkmark.seal.fill" : unlocked ? "circle" : "lock.fill")
@@ -534,47 +567,5 @@ private struct ModeCardStyle: ButtonStyle {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(active ? accent.opacity(0.58) : .white.opacity(0.08), lineWidth: 1))
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-    }
-}
-
-private struct TutorialView: View {
-    let theme: CircuitTheme
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ZStack {
-            SkyBackground(theme: theme)
-            VStack(spacing: 18) {
-                Text("HOW TO FIRE THE CIRCUIT")
-                    .font(.title2.weight(.black))
-                    .foregroundStyle(.white)
-                tutorialStep(1, "Tap a tile to rotate", "Line up the metal conduits.", .cyan)
-                tutorialStep(2, "Connect spark to rocket", "Complete a continuous route across the chassis.", .orange)
-                tutorialStep(3, "Watch ignition travel", "The plasma burns through each connected segment before launch.", .purple)
-                Button("Got it") { dismiss() }
-                    .buttonStyle(GameControlStyle(kind: .primary, accent: ThemeChrome(theme: theme).gold))
-            }
-            .padding(22)
-        }
-        .preferredColorScheme(.dark)
-    }
-
-    private func tutorialStep(_ number: Int, _ title: String, _ body: String, _ accent: Color) -> some View {
-        HStack(spacing: 13) {
-            Text("\(number)")
-                .font(.title2.weight(.black))
-                .foregroundStyle(accent)
-                .frame(width: 44, height: 44)
-                .background(.regularMaterial, in: Circle())
-                .overlay(Circle().stroke(accent.opacity(0.5), lineWidth: 1))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline).foregroundStyle(.white)
-                Text(body).font(.subheadline).foregroundStyle(.white.opacity(0.58))
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(accent.opacity(0.22), lineWidth: 1))
     }
 }

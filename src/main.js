@@ -2,10 +2,20 @@ import { Board, Direction } from './core/board.js'
 import { plusBenefits, plusRoadmap, tutorialSteps } from './data/content.js'
 import { getMode, modeList } from './data/modes.js'
 import { getSkin, skinList } from './data/skins.js'
+import { languageList, normalizeLanguage, translate } from './data/i18n.js'
 
 const canvas = document.querySelector('#game')
 const context = canvas.getContext('2d')
 const elements = {
+  startupTagline: document.querySelector('#startup-tagline'),
+  burnLabel: document.querySelector('#burn-label'),
+  brandEyebrow: document.querySelector('#brand-eyebrow'),
+  levelLabel: document.querySelector('#level-label'),
+  rocketsLabel: document.querySelector('#rockets-label'),
+  scoreLabel: document.querySelector('#score-label'),
+  comboLabel: document.querySelector('#combo-label'),
+  timeLabel: document.querySelector('#time-label'),
+  bestLabel: document.querySelector('#best-label'),
   score: document.querySelector('#score'),
   combo: document.querySelector('#combo'),
   rockets: document.querySelector('#rockets'),
@@ -22,6 +32,7 @@ const elements = {
   pause: document.querySelector('#pause'),
   restart: document.querySelector('#restart'),
   helpButton: document.querySelector('#help-button'),
+  settingsButton: document.querySelector('#settings-button'),
   plusButton: document.querySelector('#plus-button'),
   tutorial: document.querySelector('#tutorial'),
   tutorialNumber: document.querySelector('#tutorial-number'),
@@ -35,11 +46,34 @@ const elements = {
   plusScreen: document.querySelector('#plus-screen'),
   plusClose: document.querySelector('#plus-close'),
   activeSkinName: document.querySelector('#active-skin-name'),
+  plusEyebrow: document.querySelector('#plus-eyebrow'),
+  livePreviewLabel: document.querySelector('#live-preview-label'),
+  skinsLabel: document.querySelector('#skins-label'),
+  skinsHint: document.querySelector('#skins-hint'),
+  modesLabel: document.querySelector('#modes-label'),
+  modesHint: document.querySelector('#modes-hint'),
+  benefitsLabel: document.querySelector('#benefits-label'),
+  benefitsHint: document.querySelector('#benefits-hint'),
+  roadmapLabel: document.querySelector('#roadmap-label'),
+  roadmapHint: document.querySelector('#roadmap-hint'),
+  plusFooterTitle: document.querySelector('#plus-footer-title'),
+  plusFooterBody: document.querySelector('#plus-footer-body'),
   skinGrid: document.querySelector('#skin-grid'),
   modeGrid: document.querySelector('#mode-grid'),
   benefitGrid: document.querySelector('#benefit-grid'),
   roadmap: document.querySelector('#roadmap'),
   startupSplash: document.querySelector('#startup-splash'),
+  settingsScreen: document.querySelector('#settings-screen'),
+  settingsClose: document.querySelector('#settings-close'),
+  settingsTitle: document.querySelector('#settings-title'),
+  languageLabel: document.querySelector('#language-label'),
+  musicLabel: document.querySelector('#music-label'),
+  effectsLabel: document.querySelector('#effects-label'),
+  hapticsLabel: document.querySelector('#haptics-label'),
+  languageSelect: document.querySelector('#language-select'),
+  musicToggle: document.querySelector('#music-toggle'),
+  effectsToggle: document.querySelector('#effects-toggle'),
+  hapticsToggle: document.querySelector('#haptics-toggle'),
 }
 
 const layout = Object.freeze({ canvasWidth: 768, canvasHeight: 720, rows: 8, cols: 8, cell: 72, boardX: 96, boardY: 72, boardSize: 576 })
@@ -59,6 +93,9 @@ let board
 let state
 let lastFrame = performance.now()
 let audioContext = null
+let ambientGain = null
+let ambientStarted = false
+const ambientNodes = []
 const particles = []
 const startupShownAt = performance.now()
 
@@ -83,7 +120,72 @@ function createState(modeKey = localStorage.getItem('skycircuit.mode') ?? 'class
     launchingRows: new Set(),
     burn: null,
     tutorialStep: 0,
+    language: normalizeLanguage(localStorage.getItem('skycircuit.language') ?? 'en'),
+    musicEnabled: localStorage.getItem('skycircuit.music') !== '0',
+    effectsEnabled: localStorage.getItem('skycircuit.effects') !== '0',
+    hapticsEnabled: localStorage.getItem('skycircuit.haptics') !== '0',
   }
+}
+
+function t(key) {
+  const language = state?.language ?? normalizeLanguage(localStorage.getItem('skycircuit.language') ?? 'en')
+  return translate(language, key)
+}
+
+function tf(key, values) {
+  return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, String(value)), t(key))
+}
+
+function translatedModeName(mode) {
+  return t(mode.key)
+}
+
+function translatedModeDescription(mode) {
+  if (mode.key === 'zen') return t('zenDesc')
+  if (mode.key === 'blitz') return t('blitzDesc')
+  return t('classicDesc')
+}
+
+function applyTranslations() {
+  document.documentElement.lang = state.language
+  setText(elements.startupTagline, t('startupTagline'))
+  setText(elements.burnLabel, t('ignition'))
+  setText(elements.brandEyebrow, t('tagline'))
+  setText(elements.levelLabel, t('level'))
+  setText(elements.rocketsLabel, t('rockets'))
+  setText(elements.scoreLabel, t('score'))
+  setText(elements.comboLabel, t('combo'))
+  setText(elements.timeLabel, t('time'))
+  setText(elements.bestLabel, t('best'))
+  setText(elements.pause, state.paused ? t('resume') : t('pause'))
+  setText(elements.restart, t('newGame'))
+  setText(elements.settingsTitle, t('settings'))
+  setText(elements.languageLabel, t('language'))
+  setText(elements.musicLabel, t('music'))
+  setText(elements.effectsLabel, t('effects'))
+  setText(elements.hapticsLabel, t('haptics'))
+  renderLanguageOptions()
+  applyPlusTranslations()
+}
+
+function renderLanguageOptions() {
+  elements.languageSelect.innerHTML = languageList.map(({ key, name }) => `<option value="${key}">${name}</option>`).join('')
+  elements.languageSelect.value = state.language
+}
+
+function applyPlusTranslations() {
+  setText(elements.plusEyebrow, t('plusEyebrow'))
+  setText(elements.livePreviewLabel, t('livePreview'))
+  setText(elements.skinsLabel, t('skins'))
+  setText(elements.skinsHint, t('tapSkin'))
+  setText(elements.modesLabel, t('modes'))
+  setText(elements.modesHint, t('modesHint'))
+  setText(elements.benefitsLabel, t('benefits'))
+  setText(elements.benefitsHint, t('productDirection'))
+  setText(elements.roadmapLabel, t('roadmap'))
+  setText(elements.roadmapHint, t('noBackend'))
+  setText(elements.plusFooterTitle, t('plusFooterTitle'))
+  setText(elements.plusFooterBody, t('plusFooterBody'))
 }
 
 function newGame(modeKey = state?.modeKey ?? localStorage.getItem('skycircuit.mode') ?? 'classic') {
@@ -94,9 +196,11 @@ function newGame(modeKey = state?.modeKey ?? localStorage.getItem('skycircuit.mo
   particles.length = 0
   hideOverlay()
   hideBurnBanner()
-  elements.pause.textContent = 'Pause'
   applySkin(state.skinKey, false)
-  elements.status.textContent = `${getMode(state.modeKey).name} mode. Rotate tiles and connect a spark to a rocket.`
+  syncSettingsControls()
+  applyTranslations()
+  elements.status.textContent = t('statusConnect')
+  setAmbientEnergy(state.combo, false)
   updateHud()
   if (localStorage.getItem('skycircuit.tutorialSeen') !== '1') openTutorial(0)
 }
@@ -109,7 +213,7 @@ function updateHud() {
   setText(elements.time, Number.isFinite(state.timeLeft) ? String(Math.max(0, Math.ceil(state.timeLeft))) : '∞')
   setText(elements.best, String(state.best))
   setText(elements.level, String(state.level))
-  setText(elements.modeLabel, getMode(state.modeKey).name)
+  setText(elements.modeLabel, translatedModeName(getMode(state.modeKey)))
 }
 
 function setText(element, value) {
@@ -151,7 +255,8 @@ function startBurn(launch, combo) {
   state.burning.clear()
   state.launchingRows.clear()
   state.burn = { launch, elapsed: 0, activeStage: -1, stageProgress: 0, phase: 'burn', hold: 0 }
-  elements.status.textContent = 'Circuit complete. Ignition is traveling through the connected pipes.'
+  elements.status.textContent = t('statusIgnition')
+  setAmbientEnergy(state.combo, true)
   elements.burnBanner.hidden = false
   playTone(190, 0.12, 'triangle', 0.035)
   updateHud()
@@ -191,7 +296,9 @@ function beginRocketLaunch() {
   launch.rocketRows.forEach((row, index) => spawnFirework(row, index))
   playLaunchSound(launch.rocketRows.length)
   vibrate(Math.min(95, 26 + launch.rocketRows.length * 14))
-  elements.status.textContent = launch.rocketRows.length > 1 ? `${launch.rocketRows.length} rockets launched. Combo ×${state.combo}.` : `Rocket launched. Combo ×${state.combo}.`
+  elements.status.textContent = launch.rocketRows.length > 1
+    ? tf('statusRocketMulti', { count: launch.rocketRows.length, combo: state.combo })
+    : tf('statusRocketSingle', { combo: state.combo })
 }
 
 function updateRocketHold(deltaSeconds) {
@@ -220,6 +327,7 @@ function finishLaunch(launch) {
   state.launchingRows.clear()
   state.burn = null
   state.resolving = false
+  setAmbientEnergy(state.combo, false)
   if (state.launched >= state.target) return advanceLevel()
   const cascade = board.resolveLaunch()
   if (cascade.rocketRows.length > 0) startBurn(cascade, Math.min(9, previousCombo + 1))
@@ -234,7 +342,7 @@ function advanceLevel() {
   state.target = mode.levelTarget(state.level)
   state.timeLeft = mode.levelTime(state.level)
   board = new Board(layout.rows, layout.cols, Math.random, tilePool)
-  showOverlay(`Level ${state.level}`, `${mode.name} circuit refreshed. Keep the sky lit.`, 820)
+  showOverlay(`${t('level')} ${state.level}`, t('statusConnect'), 820)
   updateHud()
 }
 
@@ -243,15 +351,15 @@ function setGameMode(modeKey) {
   localStorage.setItem('skycircuit.mode', mode.key)
   closePlusScreen()
   newGame(mode.key)
-  elements.status.textContent = `${mode.name} mode started. ${mode.description}`
+  elements.status.textContent = `${translatedModeName(mode)} · ${translatedModeDescription(mode)}`
 }
 
 function togglePause() {
   if (state.gameOver || state.resolving || state.uiPaused) return
   state.paused = !state.paused
-  elements.pause.textContent = state.paused ? 'Resume' : 'Pause'
-  elements.status.textContent = state.paused ? 'Game paused.' : 'Game resumed.'
-  if (state.paused) showOverlay('Paused', 'Resume when ready.')
+  elements.pause.textContent = state.paused ? t('resume') : t('pause')
+  elements.status.textContent = state.paused ? t('statusPaused') : t('statusResumed')
+  if (state.paused) showOverlay(t('pause'), t('statusPaused'))
   else hideOverlay()
 }
 
@@ -259,8 +367,8 @@ function endGame() {
   state.gameOver = true
   state.timeLeft = 0
   updateHud()
-  showOverlay('Show over', `Score ${state.score}. Best ${state.best}.`)
-  elements.status.textContent = 'Time expired. Start a new game to try again.'
+  showOverlay(t('gameOver'), `${t('score')} ${state.score} · ${t('best')} ${state.best}`)
+  elements.status.textContent = t('statusTimeExpired')
   playTone(120, 0.3, 'sawtooth', 0.04)
 }
 
@@ -281,7 +389,7 @@ function hideBurnBanner() {
 
 function dismissStartupSplash() {
   const elapsed = performance.now() - startupShownAt
-  const delay = Math.max(0, 720 - elapsed)
+  const delay = Math.max(0, 1_350 - elapsed)
   setTimeout(() => {
     if (elements.startupSplash.hidden) return
     elements.startupSplash.classList.add('is-hiding')
@@ -291,7 +399,7 @@ function dismissStartupSplash() {
 
 function openTutorial(step = 0) {
   if (state.resolving) {
-    elements.status.textContent = 'Watch the ignition finish before opening the tutorial.'
+    elements.status.textContent = t('statusWaitIgnition')
     return
   }
   state.tutorialStep = Math.max(0, Math.min(tutorialSteps.length - 1, step))
@@ -305,12 +413,15 @@ function renderTutorial() {
   elements.tutorial.dataset.step = String(state.tutorialStep)
   elements.tutorial.style.setProperty('--accent', tutorialAccents[step.accent])
   elements.tutorialNumber.textContent = String(step.number)
-  elements.tutorialEyebrow.textContent = step.eyebrow
-  elements.tutorialTitle.textContent = step.title
-  elements.tutorialBody.textContent = step.body
+  const prefix = `tutorial${state.tutorialStep + 1}`
+  elements.tutorialEyebrow.textContent = t(`${prefix}Eyebrow`)
+  elements.tutorialTitle.textContent = t(`${prefix}Title`)
+  elements.tutorialBody.textContent = t(`${prefix}Body`)
   elements.tutorialDots.innerHTML = tutorialSteps.map((_, index) => `<i class="${index === state.tutorialStep ? 'active' : ''}"></i>`).join('')
   elements.tutorialPrev.hidden = state.tutorialStep === 0
-  elements.tutorialNext.textContent = state.tutorialStep === tutorialSteps.length - 1 ? 'Got it' : 'Next'
+  elements.tutorialSkip.textContent = t('skip')
+  elements.tutorialPrev.textContent = t('back')
+  elements.tutorialNext.textContent = state.tutorialStep === tutorialSteps.length - 1 ? t('gotIt') : t('next')
 }
 
 function nextTutorialStep() {
@@ -336,7 +447,7 @@ function closeTutorial(markSeen) {
 
 function openPlusScreen() {
   if (state.resolving) {
-    elements.status.textContent = 'Watch the ignition finish before opening SkyCircuit Plus.'
+    elements.status.textContent = t('statusWaitIgnition')
     return
   }
   renderPlusScreen()
@@ -349,20 +460,61 @@ function closePlusScreen() {
   syncUiPause()
 }
 
+function openSettingsScreen() {
+  syncSettingsControls()
+  elements.settingsScreen.hidden = false
+  syncUiPause()
+}
+
+function closeSettingsScreen() {
+  elements.settingsScreen.hidden = true
+  syncUiPause()
+}
+
+function syncSettingsControls() {
+  elements.musicToggle.checked = state.musicEnabled
+  elements.effectsToggle.checked = state.effectsEnabled
+  elements.hapticsToggle.checked = state.hapticsEnabled
+  renderLanguageOptions()
+}
+
+function setLanguage(language) {
+  state.language = normalizeLanguage(language)
+  localStorage.setItem('skycircuit.language', state.language)
+  applyTranslations()
+  updateHud()
+  if (!elements.tutorial.hidden) renderTutorial()
+  if (!elements.plusScreen.hidden) renderPlusScreen()
+  if (!state.gameOver && !state.resolving) elements.status.textContent = t('statusConnect')
+}
+
+function setMusicEnabled(enabled) {
+  state.musicEnabled = enabled
+  localStorage.setItem('skycircuit.music', enabled ? '1' : '0')
+  if (enabled) ensureAudio()
+  setAmbientEnergy(state.combo, Boolean(state.burn))
+}
+
+function setEffectsEnabled(enabled) {
+  state.effectsEnabled = enabled
+  localStorage.setItem('skycircuit.effects', enabled ? '1' : '0')
+}
+
+function setHapticsEnabled(enabled) {
+  state.hapticsEnabled = enabled
+  localStorage.setItem('skycircuit.haptics', enabled ? '1' : '0')
+}
+
 function syncUiPause() {
-  state.uiPaused = !elements.tutorial.hidden || !elements.plusScreen.hidden
+  state.uiPaused = !elements.tutorial.hidden || !elements.plusScreen.hidden || !elements.settingsScreen.hidden
   document.body.classList.toggle('modal-open', state.uiPaused)
 }
 
 function renderPlusScreen() {
   renderSkinSelection()
   elements.modeGrid.innerHTML = modeList.map((mode) => modeCardMarkup(mode, mode.key === state.modeKey)).join('')
-  if (elements.benefitGrid.childElementCount === 0) {
-    elements.benefitGrid.innerHTML = plusBenefits.map((benefit) => `<article class="benefit-card"><span class="benefit-icon">${benefit.icon}</span><div><strong>${benefit.title}</strong><p>${benefit.body}</p></div></article>`).join('')
-  }
-  if (elements.roadmap.childElementCount === 0) {
-    elements.roadmap.innerHTML = plusRoadmap.map((item) => `<span class="roadmap-item"><b>${item.label}</b><span>${item.status}</span></span>`).join('')
-  }
+  elements.benefitGrid.innerHTML = translatedBenefits().map((benefit) => `<article class="benefit-card"><span class="benefit-icon">${benefit.icon}</span><div><strong>${benefit.title}</strong><p>${benefit.body}</p></div></article>`).join('')
+  elements.roadmap.innerHTML = translatedRoadmap().map((item) => `<span class="roadmap-item"><b>${item.label}</b><span>${item.status}</span></span>`).join('')
 }
 
 function renderSkinSelection() {
@@ -371,15 +523,37 @@ function renderSkinSelection() {
   elements.skinGrid.innerHTML = skinList.map((skin) => skinCardMarkup(skin, skin.key === activeSkin.key)).join('')
 }
 
+function translatedRoadmap() {
+  const rows = [
+    ['plusSkins', 'ready'],
+    ['zenBlitz', 'ready'],
+    ['dailyChallenge', 'nextStatus'],
+    ['weeklyEvents', 'later'],
+    ['leaderboards', 'later'],
+    ['seasonalThemes', 'later'],
+  ]
+  return plusRoadmap.map((_, index) => ({ label: t(rows[index][0]), status: t(rows[index][1]) }))
+}
+
+function translatedBenefits() {
+  const keys = [
+    ['exclusiveSkins', 'exclusiveSkinsBody'],
+    ['zenMode', 'zenModeBody'],
+    ['blitzMode', 'blitzModeBody'],
+    ['dailyChallenge', 'dailyChallengeBody'],
+  ]
+  return plusBenefits.map((benefit, index) => ({ icon: benefit.icon, title: t(keys[index][0]), body: t(keys[index][1]) }))
+}
+
 function skinCardMarkup(skin, active) {
-  const badge = skin.plus ? 'PLUS PREVIEW' : 'FREE'
+  const badge = skin.plus ? t('plusPreview') : t('free')
   const style = `--preview-top:${skin.backgroundTop};--preview-bottom:${skin.backgroundBottom};--preview-conduit:${skin.conduit};--preview-powered:${skin.powered};--preview-rocket:${skin.rocket}`
   return `<button class="skin-card ${active ? 'active' : ''}" type="button" data-skin="${skin.key}" style="${style}"><span class="skin-preview"></span><strong>${skin.name}</strong><small>${badge}</small></button>`
 }
 
 function modeCardMarkup(mode, active) {
-  const badge = mode.plus ? 'PLUS PREVIEW' : 'FREE'
-  return `<button class="mode-card ${active ? 'active' : ''}" type="button" data-mode="${mode.key}"><strong>${mode.name}</strong><span>${mode.description}</span><small>${badge}</small></button>`
+  const badge = mode.plus ? t('plusPreview') : t('free')
+  return `<button class="mode-card ${active ? 'active' : ''}" type="button" data-mode="${mode.key}"><strong>${translatedModeName(mode)}</strong><span>${translatedModeDescription(mode)}</span><small>${badge}</small></button>`
 }
 
 function handlePlusClick(event) {
@@ -1077,10 +1251,41 @@ function roundRect(x, y, width, height, radius) {
 function ensureAudio() {
   if (!audioContext) audioContext = new AudioContext()
   if (audioContext.state === 'suspended') audioContext.resume()
+  if (!ambientStarted) startAmbientMusic()
+  setAmbientEnergy(state.combo, Boolean(state.burn))
+}
+
+function startAmbientMusic() {
+  if (!audioContext || ambientStarted) return
+  ambientGain = audioContext.createGain()
+  const filter = audioContext.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 880
+  for (const [index, frequency] of [110, 164.81, 220].entries()) {
+    const oscillator = audioContext.createOscillator()
+    const gain = audioContext.createGain()
+    oscillator.type = index === 0 ? 'sine' : 'triangle'
+    oscillator.frequency.value = frequency
+    gain.gain.value = index === 0 ? 0.55 : 0.22
+    oscillator.connect(gain).connect(filter)
+    oscillator.start()
+    ambientNodes.push(oscillator, gain)
+  }
+  filter.connect(ambientGain).connect(audioContext.destination)
+  ambientGain.gain.value = 0
+  ambientNodes.push(filter)
+  ambientStarted = true
+}
+
+function setAmbientEnergy(combo, igniting) {
+  if (!audioContext || !ambientGain) return
+  const target = state.musicEnabled ? Math.min(0.052, 0.026 + combo * 0.002 + (igniting ? 0.012 : 0)) : 0
+  ambientGain.gain.cancelScheduledValues(audioContext.currentTime)
+  ambientGain.gain.linearRampToValueAtTime(target, audioContext.currentTime + 0.28)
 }
 
 function playTone(frequency, duration, type, gainValue) {
-  if (!audioContext) return
+  if (!audioContext || !state.effectsEnabled) return
   const oscillator = audioContext.createOscillator()
   const gain = audioContext.createGain()
   oscillator.type = type
@@ -1099,7 +1304,7 @@ function playLaunchSound(count) {
 }
 
 function vibrate(duration) {
-  if ('vibrate' in navigator) navigator.vibrate(duration)
+  if (state.hapticsEnabled && 'vibrate' in navigator) navigator.vibrate(duration)
 }
 
 function frame(now) {
@@ -1131,12 +1336,18 @@ canvas.addEventListener('pointerdown', handleBoardTap)
 elements.pause.addEventListener('click', togglePause)
 elements.restart.addEventListener('click', () => newGame())
 elements.helpButton.addEventListener('click', () => openTutorial(0))
+elements.settingsButton.addEventListener('click', openSettingsScreen)
 elements.plusButton.addEventListener('click', openPlusScreen)
 elements.tutorialSkip.addEventListener('click', () => closeTutorial(true))
 elements.tutorialPrev.addEventListener('click', previousTutorialStep)
 elements.tutorialNext.addEventListener('click', nextTutorialStep)
 elements.plusClose.addEventListener('click', closePlusScreen)
 elements.plusScreen.addEventListener('click', handlePlusClick)
+elements.settingsClose.addEventListener('click', closeSettingsScreen)
+elements.languageSelect.addEventListener('change', (event) => setLanguage(event.target.value))
+elements.musicToggle.addEventListener('change', (event) => setMusicEnabled(event.target.checked))
+elements.effectsToggle.addEventListener('change', (event) => setEffectsEnabled(event.target.checked))
+elements.hapticsToggle.addEventListener('change', (event) => setHapticsEnabled(event.target.checked))
 window.addEventListener('resize', configureCanvasResolution)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && state && !state.gameOver && !state.paused && !state.resolving && !state.uiPaused) togglePause()
@@ -1144,7 +1355,8 @@ document.addEventListener('visibilitychange', () => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return
-  if (!elements.plusScreen.hidden) closePlusScreen()
+  if (!elements.settingsScreen.hidden) closeSettingsScreen()
+  else if (!elements.plusScreen.hidden) closePlusScreen()
   else if (!elements.tutorial.hidden) closeTutorial(false)
 })
 

@@ -15,13 +15,19 @@ struct DailyRunWidget: Widget {
         StaticConfiguration(kind: "SkyCircuitDailyRun", provider: DailyRunProvider()) { entry in
             HStack {
                 VStack(alignment: .leading) {
-                    Text("Daily Run")
+                    Text("widget_daily_run")
                         .font(.caption.bold())
-                    Text("🔥 \(entry.streak) day streak")
-                        .font(.headline)
-                    Text("Mini rank #\(entry.rank)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Text("🔥 \(entry.streak)")
+                        Text("widget_day_streak")
+                    }
+                    .font(.headline)
+                    HStack(spacing: 3) {
+                        Text("widget_mini_rank")
+                        Text("#\(entry.rank)")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Text("🚀")
@@ -29,8 +35,8 @@ struct DailyRunWidget: Widget {
             }
             .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Daily Run")
-        .description("Daily streak and mini leaderboard rank.")
+        .configurationDisplayName("widget_daily_run")
+        .description("widget_description")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -61,7 +67,7 @@ struct DailyRunLiveActivity: Widget {
         ActivityConfiguration(for: DailyRunAttributes.self) { context in
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Daily Run")
+                    Text("widget_daily_run")
                         .font(.headline)
                     Spacer()
                     Text("#\(context.state.rank)")
@@ -71,7 +77,10 @@ struct DailyRunLiveActivity: Widget {
                 HStack {
                     Text("🔥 \(context.state.streak)")
                     Spacer()
-                    Text("Score \(context.state.score)")
+                    HStack(spacing: 3) {
+                        Text("widget_score")
+                        Text("\(context.state.score)")
+                    }
                 }
                 .font(.caption)
             }
@@ -87,8 +96,11 @@ struct DailyRunLiveActivity: Widget {
                     Text("#\(context.state.rank)")
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text("SkyCircuit Daily Run")
-                        .font(.caption.bold())
+                    HStack(spacing: 4) {
+                        Text("SkyCircuit")
+                        Text("widget_daily_run")
+                    }
+                    .font(.caption.bold())
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     ProgressView(value: context.state.progress)

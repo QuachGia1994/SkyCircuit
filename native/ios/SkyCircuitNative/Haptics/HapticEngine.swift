@@ -3,9 +3,14 @@ import CoreHaptics
 @MainActor
 final class HapticEngine {
     private var engine: CHHapticEngine?
+    private var enabled = true
 
     init() {
         prepare()
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
     }
 
     func prepare() {
@@ -21,7 +26,7 @@ final class HapticEngine {
     }
 
     func playPlacement(quality: Double) {
-        guard let engine else { return }
+        guard enabled, let engine else { return }
         let clamped = min(max(quality, 0), 1)
         let intensity = Float(0.58 - clamped * 0.30)
         let sharpness = Float(0.28 + clamped * 0.68)
@@ -43,7 +48,7 @@ final class HapticEngine {
     }
 
     func playLaunch(combo: Int) {
-        guard let engine else { return }
+        guard enabled, let engine else { return }
         let strength = Float(min(1, 0.55 + Double(combo) * 0.06))
         let events = [
             CHHapticEvent(
