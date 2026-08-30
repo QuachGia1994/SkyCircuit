@@ -103,41 +103,54 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   pointer-events: none;
 }
 .startup-splash.is-hiding { opacity: 0; visibility: hidden; pointer-events: none; }
-.startup-logo-wrap { position: relative; width: min(43vw, 190px); aspect-ratio: 1; }
-.startup-logo {
-  position: relative;
-  z-index: 2;
-  display: block;
+.startup-wordmark { position: relative; display: flex; align-items: center; gap: 9px; }
+.startup-wordmark > span {
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(91, 211, 255, .72);
+  border-radius: 50%;
+  box-shadow: 0 0 18px rgba(78, 194, 255, .18);
+}
+.startup-wordmark > span::after {
+  content: "✦";
+  display: grid;
   width: 100%;
   height: 100%;
-  border-radius: 27%;
-  filter: drop-shadow(0 18px 34px rgba(0,0,0,.48)) drop-shadow(0 0 24px rgba(75,194,255,.26));
-  animation: startupFloat 1.55s ease-in-out infinite alternate;
-}
-.startup-orbit {
-  position: absolute;
-  z-index: 1;
-  inset: -12%;
-  border: 2px solid rgba(91, 211, 255, .44);
-  border-left-color: transparent;
-  border-radius: 50%;
-  box-shadow: 0 0 30px rgba(78, 194, 255, .2);
-  animation: startupOrbit 3.8s linear infinite;
+  place-items: center;
+  color: var(--gold);
+  font-size: .85rem;
 }
 .startup-splash strong {
   position: relative;
   color: #f7fbff;
-  font-size: clamp(2rem, 10vw, 3.2rem);
+  font-size: clamp(1.7rem, 8vw, 2.2rem);
   font-weight: 900;
-  letter-spacing: -.06em;
-  text-shadow: 0 0 24px rgba(91, 210, 255, .25);
+  letter-spacing: -.055em;
+  text-shadow: 0 0 18px rgba(91, 210, 255, .20);
 }
 .startup-splash small {
   position: relative;
   color: var(--gold);
-  font-size: .66rem;
+  font-size: .58rem;
   font-weight: 900;
-  letter-spacing: .28em;
+  letter-spacing: .24em;
+}
+.startup-progress {
+  position: relative;
+  width: 170px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: rgba(255,255,255,.12);
+}
+.startup-progress i {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--gold), #ff8b42);
+  box-shadow: 0 0 14px rgba(94,219,255,.34);
+  animation: startupProgress 1.6s ease-in-out infinite;
 }
 
 .app-shell {
@@ -523,8 +536,7 @@ body.modal-open::after { visibility: hidden; }
 @keyframes ignitionPulse { from { opacity: .45; transform: scaleX(.7); } to { opacity: 1; transform: scaleX(1); } }
 @keyframes demoRotate { 0%, 32% { transform: rotate(0); } 58%, 100% { transform: rotate(90deg); } }
 @keyframes demoBurn { 0% { transform: scaleX(.02); } 72%, 100% { transform: scaleX(1); } }
-@keyframes startupFloat { from { transform: translateY(2px) scale(.985); } to { transform: translateY(-6px) scale(1.015); } }
-@keyframes startupOrbit { to { transform: rotate(360deg); } }
+@keyframes startupProgress { 0% { transform: translateX(-120%); } 55%, 100% { transform: translateX(240%); } }
 
 @media (hover: none) and (pointer: coarse) {
   .plus-panel { box-shadow: 0 24px 64px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.1); }
@@ -539,8 +551,7 @@ body.modal-open::after { visibility: hidden; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .startup-logo,
-  .startup-orbit,
+  .startup-progress i,
   .burn-banner span,
   .tutorial-layer[data-step="0"] .demo-pipe-b,
   .tutorial-layer[data-step="2"] .demo-burn { animation: none; }

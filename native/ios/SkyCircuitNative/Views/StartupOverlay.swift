@@ -7,23 +7,24 @@ struct StartupOverlay: View {
     var body: some View {
         ZStack {
             SkyBackground(theme: theme)
-            VStack(spacing: 18) {
-                Image("LaunchLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 300)
-                    .shadow(color: chrome.cyan.opacity(0.34), radius: 28)
-                Text("SkyCircuit")
-                    .font(.system(size: 48, weight: .bold, design: .rounded))
-                    .foregroundStyle(LinearGradient(colors: [.white, chrome.cyan, chrome.gold], startPoint: .leading, endPoint: .trailing))
-                    .shadow(color: chrome.cyan.opacity(0.24), radius: 18)
+            VStack(spacing: 14) {
+                HStack(spacing: 9) {
+                    Circle()
+                        .stroke(chrome.cyan.opacity(0.72), lineWidth: 2)
+                        .frame(width: 34, height: 34)
+                        .overlay(Image(systemName: "sparkles").font(.caption).foregroundStyle(chrome.gold))
+                    Text("SkyCircuit")
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(LinearGradient(colors: [.white, chrome.cyan, chrome.gold], startPoint: .leading, endPoint: .trailing))
+                }
+                .shadow(color: chrome.cyan.opacity(0.20), radius: 14)
                 Text(L10n.text("startup_tagline", language: language))
-                    .font(.system(size: 12, weight: .black, design: .rounded))
-                    .tracking(4.2)
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .tracking(3.4)
                     .foregroundStyle(chrome.gold)
                 ignitionLine
             }
-            .padding(28)
+            .padding(24)
         }
         .ignoresSafeArea()
         .accessibilityElement(children: .combine)

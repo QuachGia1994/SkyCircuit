@@ -42,50 +42,56 @@ struct GameRootView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 10) {
-            brand
-            Spacer(minLength: 4)
-            iconButton("questionmark", accent: chrome.cyan) {
-                guard engine.burnAnimation == nil else { return }
-                showTutorial = true
-            }
-            iconButton("gearshape.fill", accent: .white.opacity(0.72)) { showSettings = true }
-            Button(L10n.text("plus", language: engine.language)) {
-                guard engine.burnAnimation == nil else { return }
-                showPlus = true
-            }
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Text(L10n.text("firework_tagline", language: engine.language))
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .tracking(2.2)
+                    .foregroundStyle(chrome.gold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Spacer(minLength: 6)
+                iconButton("questionmark", accent: chrome.cyan) {
+                    guard engine.burnAnimation == nil else { return }
+                    showTutorial = true
+                }
+                iconButton("gearshape.fill", accent: .white.opacity(0.72)) { showSettings = true }
+                Button(L10n.text("plus", language: engine.language)) {
+                    guard engine.burnAnimation == nil else { return }
+                    showPlus = true
+                }
                 .buttonStyle(GlassTextButtonStyle(accent: chrome.gold))
+            }
+            brand
         }
     }
 
     private var brand: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(L10n.text("firework_tagline", language: engine.language))
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .tracking(2.4)
-                .foregroundStyle(chrome.gold)
-            HStack(spacing: 8) {
-                Text("SkyCircuit")
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.72)
-                    .lineLimit(1)
-                    .foregroundStyle(brandGradient)
-                    .shadow(color: chrome.cyan.opacity(0.28), radius: 12)
-                Circle()
-                    .trim(from: 0.08, to: 0.82)
-                    .stroke(chrome.cyan.opacity(0.75), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
-                    .frame(width: 34, height: 34)
-                    .rotationEffect(.degrees(-24))
-                    .overlay(Image(systemName: "sparkle").font(.caption).foregroundStyle(chrome.gold))
-            }
+        HStack(spacing: 8) {
+            Text("SkyCircuit")
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.84)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .foregroundStyle(brandGradient)
+                .shadow(color: chrome.cyan.opacity(0.28), radius: 12)
+            Circle()
+                .trim(from: 0.08, to: 0.82)
+                .stroke(chrome.cyan.opacity(0.75), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
+                .frame(width: 34, height: 34)
+                .rotationEffect(.degrees(-24))
+                .overlay(Image(systemName: "sparkle").font(.caption).foregroundStyle(chrome.gold))
+            Spacer(minLength: 0)
         }
     }
 
     private var modeStrip: some View {
         HStack(spacing: 10) {
             Label(engine.mode.title(language: engine.language), systemImage: "circle.grid.cross")
-                .font(.caption.weight(.black))
-                .tracking(1.1)
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .tracking(0.7)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
                 .foregroundStyle(chrome.gold)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
@@ -96,7 +102,9 @@ struct GameRootView: View {
                 engine.startDailyRun()
             } label: {
                 Label(L10n.text("daily", language: engine.language), systemImage: "flame.fill")
-                    .font(.caption.weight(.black))
+                    .font(.system(size: 11, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .foregroundStyle(chrome.cyan)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)

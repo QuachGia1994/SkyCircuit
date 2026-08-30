@@ -8,19 +8,25 @@ async function text(path) {
   return readFile(new URL(path, root), 'utf8')
 }
 
-test('startup branding exists in web shell and Capacitor splash config', async () => {
-  const [html, configText] = await Promise.all([
+test('only the custom branded splash carries logo text and loading progress', async () => {
+  const [html, configText, iosProject, iosStartup] = await Promise.all([
     text('index.html'),
     text('capacitor.config.json'),
+    text('native/ios/project.yml'),
+    text('native/ios/SkyCircuitNative/Views/StartupOverlay.swift'),
   ])
   const config = JSON.parse(configText)
 
   assert.match(html, /id="startup-splash"/)
-  assert.match(html, /assets\/icon\.svg/)
+  assert.match(html, /class="startup-wordmark"/)
+  assert.match(html, /class="startup-progress"/)
   assert.equal(config.plugins?.SplashScreen?.launchAutoHide, true)
-  assert.equal(config.plugins?.SplashScreen?.launchShowDuration, 4000)
-  assert.equal(config.plugins?.SplashScreen?.launchFadeOutDuration, 340)
+  assert.equal(config.plugins?.SplashScreen?.launchShowDuration, 120)
+  assert.equal(config.plugins?.SplashScreen?.launchFadeOutDuration, 80)
   assert.equal(config.plugins?.SplashScreen?.backgroundColor, '#07111fff')
+  assert.doesNotMatch(iosProject, /UIImageName:\s*LaunchLogo/)
+  assert.doesNotMatch(iosStartup, /Image\("LaunchLogo"\)/)
+  assert.match(iosStartup, /ignitionLine/)
 })
 
 test('Plus skin preview owns a clipped block box', async () => {
@@ -61,7 +67,7 @@ test('Android and iOS share launch timing and cinematic phases', async () => {
   assert.match(iosRoot, /Task\.sleep\(for: \.seconds\(4\.0\)\)/)
 })
 
-test('Android bootstrap mirrors iOS ambient audio activation and music progression', async () => {
+test('Android bootstrap mirrors iOS ambient audio activation, progression, and louder music mix', async () => {
   const [webSource, iosRoot, iosAudio] = await Promise.all([
     text('src/main.js'),
     text('native/ios/SkyCircuitNative/Views/GameRootView.swift'),
@@ -74,7 +80,18 @@ test('Android bootstrap mirrors iOS ambient audio activation and music progressi
   assert.match(iosAudio, /let roots = \[110\.0, 130\.81, 146\.83, 98\.0\]/)
   assert.match(webSource, /659\.25 \+ lift, 783\.99 \+ lift, 1046\.5 \+ lift/)
   assert.match(iosAudio, /659\.25 \+ lift, 783\.99 \+ lift, 1046\.50 \+ lift/)
+  assert.match(webSource, /Math\.min\(0\.88, 0\.62 \+ comboLift \+ \(igniting \? 0\.10 : 0\)\)/)
+  assert.match(iosAudio, /min\(0\.88, 0\.62 \+ comboLift \+ \(igniting \? 0\.10 : 0\)\)/)
   assert.match(iosRoot, /engine\.activateAudio\(\)/)
+})
+
+test('iOS play header keeps the title and mode labels single-line on compact phones', async () => {
+  const iosRoot = await text('native/ios/SkyCircuitNative/Views/GameRootView.swift')
+
+  assert.match(iosRoot, /VStack\(alignment: \.leading, spacing: 9\)/)
+  assert.match(iosRoot, /Text\("SkyCircuit"\)[\s\S]*?\.layoutPriority\(1\)/)
+  assert.match(iosRoot, /engine\.mode\.title[\s\S]*?\.lineLimit\(1\)/)
+  assert.match(iosRoot, /L10n\.text\("daily"[\s\S]*?\.lineLimit\(1\)/)
 })
 
 test('Android and iOS expose the same six launch languages', async () => {

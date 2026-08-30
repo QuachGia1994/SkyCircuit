@@ -40,13 +40,13 @@ final class ProceduralAudioEngine {
     func setMusicEnabled(_ enabled: Bool) {
         musicEnabled = enabled
         if enabled { activate() }
-        musicPlayer.volume = enabled ? 0.46 : 0
+        musicPlayer.volume = enabled ? 0.64 : 0
     }
 
     func setMusicEnergy(combo: Int, igniting: Bool) {
         guard musicEnabled else { return }
-        let comboLift = Float(min(combo, 8)) * 0.018
-        musicPlayer.volume = min(0.68, 0.44 + comboLift + (igniting ? 0.08 : 0))
+        let comboLift = Float(min(combo, 8)) * 0.02
+        musicPlayer.volume = min(0.88, 0.62 + comboLift + (igniting ? 0.10 : 0))
     }
 
     func playPlacement(quality: Double) {
@@ -107,7 +107,7 @@ final class ProceduralAudioEngine {
         guard let buffer = makeMusicBuffer(format: format) else {
             throw AudioFailure.musicBufferUnavailable
         }
-        musicPlayer.volume = 0.46
+        musicPlayer.volume = 0.64
         musicPlayer.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
         musicPlayer.play()
     }
@@ -132,7 +132,7 @@ final class ProceduralAudioEngine {
                 + 0.48 * sin(2 * .pi * root * 1.5 * time + 0.7)
                 + 0.24 * sin(2 * .pi * root * 2.0 * time + 1.4)
             let shimmer = 0.15 * sin(2 * .pi * 0.19 * time) * sin(2 * .pi * root * 4 * time)
-            channel[frame] = Float((pad * 0.052 + shimmer * 0.024) * breath)
+            channel[frame] = Float((pad * 0.068 + shimmer * 0.030) * breath)
         }
     }
 

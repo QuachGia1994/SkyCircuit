@@ -1381,15 +1381,15 @@ function makeAmbientBuffer(audio) {
       + 0.48 * Math.sin(2 * Math.PI * root * 1.5 * time + 0.7)
       + 0.24 * Math.sin(2 * Math.PI * root * 2 * time + 1.4)
     const shimmer = 0.15 * Math.sin(2 * Math.PI * 0.19 * time) * Math.sin(2 * Math.PI * root * 4 * time)
-    channel[frame] = (pad * 0.035 + shimmer * 0.018) * breath
+    channel[frame] = (pad * 0.068 + shimmer * 0.030) * breath
   }
   return buffer
 }
 
 function setAmbientEnergy(combo, igniting) {
   if (!audioContext || !ambientGain) return
-  const comboLift = Math.min(combo, 8) * 0.018
-  const target = state.musicEnabled ? Math.min(0.68, 0.44 + comboLift + (igniting ? 0.08 : 0)) : 0
+  const comboLift = Math.min(combo, 8) * 0.02
+  const target = state.musicEnabled ? Math.min(0.88, 0.62 + comboLift + (igniting ? 0.10 : 0)) : 0
   ambientGain.gain.cancelScheduledValues(audioContext.currentTime)
   ambientGain.gain.linearRampToValueAtTime(target, audioContext.currentTime + 0.28)
 }
