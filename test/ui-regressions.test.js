@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import test from 'node:test'
 
 const root = new URL('../', import.meta.url)
@@ -67,28 +67,27 @@ test('Android and iOS share launch timing and cinematic phases', async () => {
   assert.match(iosRoot, /Task\.sleep\(for: \.seconds\(4\.0\)\)/)
 })
 
-test('Android and iOS use a phone-audible music presence band and firework blast', async () => {
-  const [webSource, iosRoot, iosAudio] = await Promise.all([
+test('Android and iOS bundle the same faster CC0 arcade BGM and keep procedural firework blast', async () => {
+  const [webSource, iosRoot, iosAudio, iosProject, audioInfo] = await Promise.all([
     text('src/main.js'),
     text('native/ios/SkyCircuitNative/Views/GameRootView.swift'),
     text('native/ios/SkyCircuitNative/Audio/ProceduralAudioEngine.swift'),
+    text('native/ios/project.yml'),
+    stat(new URL('../assets/audio/duru-arcade-vibe.mp3', import.meta.url)),
   ])
 
-  assert.match(webSource, /bootstrapAmbientAudio\(\)/)
-  assert.match(webSource, /pointerdown', bootstrapAmbientAudio/)
-  assert.match(webSource, /root \* 4/)
-  assert.match(webSource, /root \* 6/)
-  assert.match(webSource, /root \* 9/)
-  assert.match(iosAudio, /root \* 4\.0/)
-  assert.match(iosAudio, /root \* 6\.0/)
-  assert.match(iosAudio, /root \* 9\.0/)
-  assert.match(webSource, /Math\.min\(0\.96, 0\.76 \+ comboLift \+ \(igniting \? 0\.08 : 0\)\)/)
-  assert.match(iosAudio, /min\(0\.96, 0\.76 \+ comboLift \+ \(igniting \? 0\.08 : 0\)\)/)
+  assert.ok(audioInfo.size > 1_000_000)
+  assert.match(webSource, /assets\/audio\/duru-arcade-vibe\.mp3/)
+  assert.match(webSource, /playbackRate = 1\.08/)
+  assert.match(webSource, /Math\.min\(1\.16, 1\.08/)
+  assert.match(iosAudio, /duru-arcade-vibe/)
+  assert.match(iosAudio, /player\.rate = 1\.08/)
+  assert.match(iosAudio, /min\(1\.16, 1\.08/)
+  assert.match(iosProject, /duru-arcade-vibe\.mp3/)
   assert.match(webSource, /1450 \+ lift/)
   assert.match(webSource, /2350 \+ lift/)
   assert.match(iosAudio, /1_450 \+ lift/)
   assert.match(iosAudio, /2_350 \+ lift/)
-  assert.match(iosAudio, /mainMixerNode\.outputVolume = 1\.0/)
   assert.match(iosRoot, /engine\.activateAudio\(\)/)
 })
 
@@ -122,18 +121,22 @@ test('Android and iOS expose the same six launch languages', async () => {
   }
 })
 
-test('Android and iOS both resolve one reachable rocket per source without same-row restriction', async () => {
+test('Android and iOS burn the full source component and fan out to every connected rocket', async () => {
   const [webBoard, iosEngine] = await Promise.all([
     text('src/core/board.js'),
     text('native/ios/SkyCircuitNative/Game/GameEngine.swift'),
   ])
 
-  assert.match(webBoard, /nearestRocketPath\(sourceRow, claimedRocketRows/)
-  assert.match(webBoard, /isUnclaimedRocketEndpoint/)
-  assert.doesNotMatch(webBoard, /pairedRocketPath/)
-  assert.match(iosEngine, /nearestRocketPath\(/)
-  assert.match(iosEngine, /claimedRocketRows/)
-  assert.doesNotMatch(iosEngine, /pairedRocketPath/)
+  assert.match(webBoard, /sourceComponent\(row\)/)
+  assert.match(webBoard, /component\.rocketRows\.length === 0/)
+  assert.match(webBoard, /for \(const cell of component\.cells\)/)
+  assert.match(webBoard, /isRocketEndpoint/)
+  assert.doesNotMatch(webBoard, /nearestRocketPath|reachableRocketPaths/)
+  assert.match(iosEngine, /sourceComponent\(from: source\)/)
+  assert.match(iosEngine, /rocketRows\.formUnion\(component\.rocketRows\)/)
+  assert.match(iosEngine, /for cell in component\.cells/)
+  assert.match(iosEngine, /isRocketEndpoint/)
+  assert.doesNotMatch(iosEngine, /nearestRocketPath|reachableRocketPaths/)
 })
 
 test('Android beta has explicit full-access build flag and Daily Run parity hooks', async () => {

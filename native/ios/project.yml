@@ -16,6 +16,8 @@ targets:
     sources:
       - SkyCircuitNative
       - Shared
+      - path: ../../assets/audio/duru-arcade-vibe.mp3
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.skycircuit.native

@@ -101,9 +101,7 @@ let board
 let state
 let lastFrame = performance.now()
 let audioContext = null
-let ambientGain = null
-let ambientStarted = false
-const ambientNodes = []
+let backgroundMusic = null
 const particles = []
 const startupShownAt = performance.now()
 
@@ -1341,11 +1339,10 @@ function roundRect(x, y, width, height, radius) {
 function ensureAudio() {
   if (!audioContext) {
     const AudioContextType = globalThis.AudioContext ?? globalThis.webkitAudioContext
-    if (!AudioContextType) return
-    audioContext = new AudioContextType()
+    if (AudioContextType) audioContext = new AudioContextType()
   }
-  if (audioContext.state === 'suspended') void audioContext.resume()
-  if (!ambientStarted) startAmbientMusic()
+  if (audioContext?.state === 'suspended') void audioContext.resume()
+  ensureBackgroundMusic()
   setAmbientEnergy(state.combo, Boolean(state.burn))
 }
 
@@ -1354,48 +1351,27 @@ function bootstrapAmbientAudio() {
   ensureAudio()
 }
 
-function startAmbientMusic() {
-  if (!audioContext || ambientStarted) return
-  const source = audioContext.createBufferSource()
-  source.buffer = makeAmbientBuffer(audioContext)
-  source.loop = true
-  ambientGain = audioContext.createGain()
-  source.connect(ambientGain).connect(audioContext.destination)
-  ambientGain.gain.value = 0
-  source.start()
-  ambientNodes.push(source)
-  ambientStarted = true
-}
-
-function makeAmbientBuffer(audio) {
-  const duration = 8
-  const frameCount = Math.floor(audio.sampleRate * duration)
-  const buffer = audio.createBuffer(1, frameCount, audio.sampleRate)
-  const channel = buffer.getChannelData(0)
-  const roots = [110, 130.81, 146.83, 98]
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const time = frame / audio.sampleRate
-    const root = roots[Math.min(roots.length - 1, Math.floor(time / 2))]
-    const breath = 0.72 + 0.28 * Math.sin(Math.PI * time / 2)
-    const pad = Math.sin(2 * Math.PI * root * time)
-      + 0.48 * Math.sin(2 * Math.PI * root * 1.5 * time + 0.7)
-      + 0.24 * Math.sin(2 * Math.PI * root * 2 * time + 1.4)
-    const presence = 0.34 * Math.sin(2 * Math.PI * root * 4 * time + 0.3)
-      + 0.22 * Math.sin(2 * Math.PI * root * 6 * time + 1.1)
-      + 0.12 * Math.sin(2 * Math.PI * root * 9 * time + 2)
-    const shimmer = 0.15 * Math.sin(2 * Math.PI * 0.19 * time) * Math.sin(2 * Math.PI * root * 8 * time)
-    const mixed = (pad * 0.060 + presence * 0.16 + shimmer * 0.034) * breath
-    channel[frame] = Math.tanh(mixed * 1.35)
+function ensureBackgroundMusic() {
+  if (!backgroundMusic) {
+    backgroundMusic = new Audio('./assets/audio/duru-arcade-vibe.mp3')
+    backgroundMusic.loop = true
+    backgroundMusic.preload = 'auto'
+    backgroundMusic.volume = 0.72
+    backgroundMusic.playbackRate = 1.08
+    if ('preservesPitch' in backgroundMusic) backgroundMusic.preservesPitch = true
   }
-  return buffer
+  if (state.musicEnabled && backgroundMusic.paused) void backgroundMusic.play().catch(() => {})
 }
 
 function setAmbientEnergy(combo, igniting) {
-  if (!audioContext || !ambientGain) return
-  const comboLift = Math.min(combo, 8) * 0.018
-  const target = state.musicEnabled ? Math.min(0.96, 0.76 + comboLift + (igniting ? 0.08 : 0)) : 0
-  ambientGain.gain.cancelScheduledValues(audioContext.currentTime)
-  ambientGain.gain.linearRampToValueAtTime(target, audioContext.currentTime + 0.28)
+  if (!backgroundMusic) return
+  const comboLift = Math.min(combo, 8) * 0.014
+  const targetVolume = state.musicEnabled ? Math.min(0.90, 0.72 + comboLift + (igniting ? 0.05 : 0)) : 0
+  const targetRate = Math.min(1.16, 1.08 + Math.min(combo, 8) * 0.006 + (igniting ? 0.02 : 0))
+  backgroundMusic.volume = targetVolume
+  backgroundMusic.playbackRate = targetRate
+  if (!state.musicEnabled) backgroundMusic.pause()
+  else if (backgroundMusic.paused) void backgroundMusic.play().catch(() => {})
 }
 
 function playTone(frequency, duration, type, gainValue) {

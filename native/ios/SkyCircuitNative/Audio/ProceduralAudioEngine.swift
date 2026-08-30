@@ -6,12 +6,13 @@ final class ProceduralAudioEngine {
         case formatUnavailable
         case sessionConfigurationFailed(String)
         case engineStartFailed(String)
-        case musicBufferUnavailable
+        case musicAssetUnavailable
+        case musicPlayerFailed(String)
     }
 
     private let engine = AVAudioEngine()
     private let effectsPlayer = AVAudioPlayerNode()
-    private let musicPlayer = AVAudioPlayerNode()
+    private var backgroundPlayer: AVAudioPlayer?
     private var format: AVAudioFormat?
     private var effectsEnabled = true
     private var musicEnabled = true
@@ -27,7 +28,7 @@ final class ProceduralAudioEngine {
             engine.mainMixerNode.outputVolume = 1.0
             if !engine.isRunning { try engine.start() }
             if !effectsPlayer.isPlaying { effectsPlayer.play() }
-            if !musicPlayer.isPlaying { musicPlayer.play() }
+            if musicEnabled { backgroundPlayer?.play() }
             setMusicEnergy(combo: 1, igniting: false)
         } catch {
             lastError = .engineStartFailed(error.localizedDescription)
@@ -40,14 +41,20 @@ final class ProceduralAudioEngine {
 
     func setMusicEnabled(_ enabled: Bool) {
         musicEnabled = enabled
-        if enabled { activate() }
-        musicPlayer.volume = enabled ? 0.78 : 0
+        guard let backgroundPlayer else { return }
+        if enabled {
+            activate()
+            backgroundPlayer.play()
+        } else {
+            backgroundPlayer.pause()
+        }
     }
 
     func setMusicEnergy(combo: Int, igniting: Bool) {
-        guard musicEnabled else { return }
-        let comboLift = Float(min(combo, 8)) * 0.018
-        musicPlayer.volume = min(0.96, 0.76 + comboLift + (igniting ? 0.08 : 0))
+        guard musicEnabled, let backgroundPlayer else { return }
+        let comboLift = Float(min(combo, 8)) * 0.014
+        backgroundPlayer.volume = min(0.90, 0.72 + comboLift + (igniting ? 0.05 : 0))
+        backgroundPlayer.rate = min(1.16, 1.08 + Float(min(combo, 8)) * 0.006 + (igniting ? 0.02 : 0))
     }
 
     func playPlacement(quality: Double) {
@@ -73,12 +80,12 @@ final class ProceduralAudioEngine {
             return
         }
         self.format = format
-        attachPlayers(format: format)
+        attachEffectsPlayer(format: format)
         do {
             try configureSession()
             try engine.start()
             effectsPlayer.play()
-            try startMusic(format: format)
+            try prepareBackgroundMusic()
         } catch let failure as AudioFailure {
             lastError = failure
         } catch {
@@ -96,47 +103,26 @@ final class ProceduralAudioEngine {
         }
     }
 
-    private func attachPlayers(format: AVAudioFormat) {
+    private func attachEffectsPlayer(format: AVAudioFormat) {
         engine.attach(effectsPlayer)
-        engine.attach(musicPlayer)
         engine.connect(effectsPlayer, to: engine.mainMixerNode, format: format)
-        engine.connect(musicPlayer, to: engine.mainMixerNode, format: format)
     }
 
-    private func startMusic(format: AVAudioFormat) throws {
-        guard let buffer = makeMusicBuffer(format: format) else {
-            throw AudioFailure.musicBufferUnavailable
+    private func prepareBackgroundMusic() throws {
+        guard let url = Bundle.main.url(forResource: "duru-arcade-vibe", withExtension: "mp3") else {
+            throw AudioFailure.musicAssetUnavailable
         }
-        musicPlayer.volume = 0.78
-        musicPlayer.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
-        musicPlayer.play()
-    }
-
-    private func makeMusicBuffer(format: AVAudioFormat) -> AVAudioPCMBuffer? {
-        let duration = 8.0
-        let frameCount = AVAudioFrameCount(format.sampleRate * duration)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return nil }
-        buffer.frameLength = frameCount
-        guard let channel = buffer.floatChannelData?[0] else { return nil }
-        writeMusic(channel: channel, frames: Int(frameCount), sampleRate: format.sampleRate)
-        return buffer
-    }
-
-    private func writeMusic(channel: UnsafeMutablePointer<Float>, frames: Int, sampleRate: Double) {
-        let roots = [110.0, 130.81, 146.83, 98.0]
-        for frame in 0..<frames {
-            let time = Double(frame) / sampleRate
-            let root = roots[min(roots.count - 1, Int(time / 2.0))]
-            let breath = 0.72 + 0.28 * sin(.pi * time / 2.0)
-            let pad = sin(2 * .pi * root * time)
-                + 0.48 * sin(2 * .pi * root * 1.5 * time + 0.7)
-                + 0.24 * sin(2 * .pi * root * 2.0 * time + 1.4)
-            let presence = 0.34 * sin(2 * .pi * root * 4.0 * time + 0.3)
-                + 0.22 * sin(2 * .pi * root * 6.0 * time + 1.1)
-                + 0.12 * sin(2 * .pi * root * 9.0 * time + 2.0)
-            let shimmer = 0.15 * sin(2 * .pi * 0.19 * time) * sin(2 * .pi * root * 8.0 * time)
-            let mixed = (pad * 0.060 + presence * 0.16 + shimmer * 0.034) * breath
-            channel[frame] = Float(tanh(mixed * 1.35))
+        do {
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.numberOfLoops = -1
+            player.volume = 0.72
+            player.enableRate = true
+            player.rate = 1.08
+            player.prepareToPlay()
+            backgroundPlayer = player
+            if musicEnabled { player.play() }
+        } catch {
+            throw AudioFailure.musicPlayerFailed(error.localizedDescription)
         }
     }
 

@@ -1,6 +1,6 @@
 # SkyCircuit
 
-Original mobile circuit puzzle inspired by the rotate-and-connect fireworks gameplay pattern of early 2000s puzzle games. SkyCircuit does not include PopCap code, branding, art, audio, or level data. Completed circuits visibly ignite from spark to rocket before launch; the prototype also includes tutorial, skins, Classic/Zen/Blitz modes, and a non-transactional Plus roadmap preview.
+Original mobile circuit puzzle inspired by the rotate-and-connect fireworks gameplay pattern of early 2000s puzzle games. SkyCircuit does not include PopCap code, branding, art, audio, or level data. Completed source-connected components visibly ignite and may fan out to every truly connected rocket before launch; the prototype also includes tutorial, skins, Classic/Zen/Blitz modes, and a non-transactional Plus roadmap preview.
 
 ## Local checks
 
@@ -29,8 +29,12 @@ For iOS, use the same flow with `ios` and `npx capacitor-assets generate --ios`;
 
 `native/` contains additive native sidecars; the Capacitor app remains the shipping fallback until parity and CI are proven.
 
-- iOS: SwiftUI + SpriteKit/SpriteView, `@Observable` GameEngine, CoreHaptics placement-quality feedback, AVAudioEngine procedural tones, ActivityKit Daily Run Live Activity + WidgetKit mini rank, and StoreKit 2 Plus shell.
+- iOS: SwiftUI + Canvas/TimelineView, `@Observable` GameEngine, CoreHaptics placement-quality feedback, shared CC0 arcade BGM + AVAudioEngine procedural gameplay SFX, ActivityKit Daily Run Live Activity + WidgetKit mini rank, and StoreKit 2 Plus shell.
 - Android: Jetpack Compose shell + SurfaceView native Canvas renderer, primitive-aware `VibrationEffect`, procedural AudioTrack, Daily Run promoted ongoing notification, Glance widget, and Play Billing boundary.
 - Both follow `native/spec/game-contract.md`: 120 Hz target frame budget under 8.3 ms where supported, graceful 60 Hz fallback, and a procedural/vector payload target under 25 MB.
 
-Xcode 27/Swift 6.4 and Android API 37/AGP 9.3 workflows are experimental and do not replace the stable Capacitor workflows.
+Xcode 27/Swift 6.4 and Android API 36/AGP 9.3 workflows are experimental and do not replace the stable Capacitor workflows.
+
+## Audio licensing
+
+Android/web and native iOS bundle the same `assets/audio/duru-arcade-vibe.mp3` gameplay loop from the CC0 `uncle-sheepsky/duru-cc0-bgm` repository. The app plays it at 1.08× baseline speed and can rise to 1.16× with combo/ignition energy. Ignition, launch, placement and firework SFX remain procedurally synthesized. See `CREDITS.md` for provenance.

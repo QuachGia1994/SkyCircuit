@@ -59,65 +59,54 @@ export class Board {
   resolveLaunch() {
     const accepted = new Map()
     const distances = new Map()
-    const claimedRocketRows = new Set()
-    const rocketRows = []
+    const rocketRows = new Set()
 
     for (let row = 0; row < this.rows; row += 1) {
       if ((this.cells[row][0] & Direction.WEST) === 0) continue
-      const result = this.nearestRocketPath(row, claimedRocketRows)
-      if (!result) continue
-      claimedRocketRows.add(result.rocketRow)
-      rocketRows.push(result.rocketRow)
-      result.path.forEach((cell, distance) => {
+      const component = this.sourceComponent(row)
+      if (component.rocketRows.length === 0) continue
+      for (const rocketRow of component.rocketRows) rocketRows.add(rocketRow)
+      for (const cell of component.cells) {
         const key = this.key(cell.row, cell.col)
         accepted.set(key, cell)
+        const distance = component.distances.get(key) ?? 0
         distances.set(key, Math.min(distances.get(key) ?? distance, distance))
-      })
+      }
     }
 
     const burned = [...accepted.values()].sort((a, b) => a.row - b.row || a.col - b.col)
-    return { burned, rocketRows: rocketRows.sort((a, b) => a - b), burnStages: this.makeBurnStages(burned, distances) }
+    return { burned, rocketRows: [...rocketRows].sort((a, b) => a - b), burnStages: this.makeBurnStages(burned, distances) }
   }
 
-  nearestRocketPath(sourceRow, claimedRocketRows = new Set()) {
+  sourceComponent(sourceRow) {
     const source = { row: sourceRow, col: 0 }
     const queue = [source]
     const visited = new Set([this.key(source.row, source.col)])
-    const parent = new Map()
+    const distances = new Map([[this.key(source.row, source.col), 0]])
+    const cells = []
+    const rocketRows = []
     let cursor = 0
 
     while (cursor < queue.length) {
       const cell = queue[cursor]
       cursor += 1
-      if (this.isUnclaimedRocketEndpoint(cell, claimedRocketRows)) {
-        return { rocketRow: cell.row, path: this.reconstructPath(source, cell, parent) }
-      }
+      cells.push(cell)
+      if (this.isRocketEndpoint(cell)) rocketRows.push(cell.row)
+      const distance = distances.get(this.key(cell.row, cell.col)) ?? 0
       for (const next of this.connectedNeighbors(cell.row, cell.col)) {
         const nextKey = this.key(next.row, next.col)
         if (visited.has(nextKey)) continue
         visited.add(nextKey)
-        parent.set(nextKey, cell)
+        distances.set(nextKey, distance + 1)
         queue.push(next)
       }
     }
-    return null
+    return { cells, rocketRows, distances }
   }
 
-  isUnclaimedRocketEndpoint(cell, claimedRocketRows) {
-    if (cell.col !== this.cols - 1 || claimedRocketRows.has(cell.row)) return false
+  isRocketEndpoint(cell) {
+    if (cell.col !== this.cols - 1) return false
     return (this.cells[cell.row][cell.col] & Direction.EAST) !== 0
-  }
-
-  reconstructPath(source, target, parent) {
-    const path = [target]
-    let current = target
-    while (current.row !== source.row || current.col !== source.col) {
-      const previous = parent.get(this.key(current.row, current.col))
-      if (!previous) return null
-      path.push(previous)
-      current = previous
-    }
-    return path.reverse()
   }
 
   makeBurnStages(cells, distances) {
