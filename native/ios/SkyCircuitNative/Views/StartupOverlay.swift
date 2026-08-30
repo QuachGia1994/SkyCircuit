@@ -11,8 +11,12 @@ struct StartupOverlay: View {
                 Image("LaunchLogo")
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: 320)
-                    .shadow(color: chrome.cyan.opacity(0.28), radius: 24)
+                    .frame(maxWidth: 300)
+                    .shadow(color: chrome.cyan.opacity(0.34), radius: 28)
+                Text("SkyCircuit")
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .foregroundStyle(LinearGradient(colors: [.white, chrome.cyan, chrome.gold], startPoint: .leading, endPoint: .trailing))
+                    .shadow(color: chrome.cyan.opacity(0.24), radius: 18)
                 Text(L10n.text("startup_tagline", language: language))
                     .font(.system(size: 12, weight: .black, design: .rounded))
                     .tracking(4.2)
@@ -24,6 +28,7 @@ struct StartupOverlay: View {
         .ignoresSafeArea()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("SkyCircuit. \(L10n.text("startup_tagline", language: language))")
+        .transition(.opacity.combined(with: .scale(scale: 1.02)))
     }
 
     private var ignitionLine: some View {

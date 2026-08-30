@@ -37,6 +37,7 @@ struct GameRootView: View {
             TutorialView(theme: engine.theme, language: engine.language)
         }
         .task { await engine.store.loadProducts() }
+        .task { engine.activateAudio() }
         .task { await dismissStartupAfterDelay() }
     }
 
@@ -204,7 +205,7 @@ struct GameRootView: View {
 
     private func dismissStartupAfterDelay() async {
         do {
-            try await Task.sleep(for: .seconds(1.55))
+            try await Task.sleep(for: .seconds(4.0))
         } catch {
             return
         }

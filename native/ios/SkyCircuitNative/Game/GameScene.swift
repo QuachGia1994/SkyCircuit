@@ -306,8 +306,33 @@ private enum CircuitCanvasRenderer {
             let launching = frame.rocketRows.contains(row)
             let hot = launching || frame.powered.contains(CircuitCell(row: row, column: 7))
             drawRocketFeed(context: &context, y: y, palette: palette, hot: hot)
-            drawRocket(context: &context, center: CGPoint(x: 718, y: y - CGFloat(frame.launchProgress) * 27), palette: palette, launching: launching, progress: frame.launchProgress, now: now)
+            guard launching else {
+                drawRocket(context: &context, center: CGPoint(x: 718, y: y), palette: palette, launching: false, progress: 0, now: now)
+                continue
+            }
+            drawLaunchingRocket(context: &context, row: row, originY: y, palette: palette, progress: frame.launchProgress, now: now)
         }
+    }
+
+    private static func drawLaunchingRocket(
+        context: inout GraphicsContext,
+        row: Int,
+        originY: CGFloat,
+        palette: CircuitPalette,
+        progress: Double,
+        now: TimeInterval
+    ) {
+        let normalized = CGFloat(min(1, max(0, progress)))
+        let flight = min(1, normalized / 0.62)
+        let burst = min(1, max(0, (normalized - 0.58) / 0.42))
+        let start = CGPoint(x: 718, y: originY)
+        let target = CGPoint(x: 585 + CGFloat(row % 3) * 55, y: 70 + CGFloat(row) * 25)
+        let center = lerp(start: start, end: target, t: easeOut(flight))
+        if burst < 0.24 {
+            drawRocket(context: &context, center: center, palette: palette, launching: true, progress: Double(flight), now: now)
+        }
+        guard burst > 0 else { return }
+        drawFireworkBurst(context: &context, center: target, palette: palette, progress: burst, seed: row)
     }
 
     private static func drawRocketFeed(context: inout GraphicsContext, y: CGFloat, palette: CircuitPalette, hot: Bool) {
@@ -352,6 +377,37 @@ private enum CircuitCanvasRenderer {
         right.addLine(to: CGPoint(x: center.x + 8, y: center.y + 18))
         right.closeSubpath()
         context.fill(right, with: .color(color))
+    }
+
+    private static func drawFireworkBurst(
+        context: inout GraphicsContext,
+        center: CGPoint,
+        palette: CircuitPalette,
+        progress: CGFloat,
+        seed: Int
+    ) {
+        let eased = easeOut(progress)
+        let radius = 18 + eased * 78
+        let alpha = max(0.12, 1 - progress * 0.82)
+        let colors = [palette.poweredCore, palette.powered, palette.rocketLight, .white]
+        for index in 0..<22 {
+            let angle = Double(index) * (.pi * 2 / 22) + Double(seed) * 0.37
+            let direction = CGPoint(x: CGFloat(cos(angle)), y: CGFloat(sin(angle)))
+            let variance = 0.72 + CGFloat((index * 17 + seed * 11) % 29) / 100
+            let inner = point(from: center, direction: direction, distance: radius * 0.18)
+            let outer = point(from: center, direction: direction, distance: radius * variance)
+            var trail = Path()
+            trail.move(to: inner)
+            trail.addLine(to: outer)
+            context.stroke(trail, with: .color(colors[index % colors.count].opacity(alpha)), style: StrokeStyle(lineWidth: index % 4 == 0 ? 3.1 : 1.8, lineCap: .round))
+            let dotRadius = index % 3 == 0 ? 3.4 : 2.0
+            let dot = CGRect(x: outer.x - dotRadius, y: outer.y - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
+            context.fill(Path(ellipseIn: dot), with: .color(colors[(index + 1) % colors.count].opacity(alpha)))
+        }
+        let ring = CGRect(x: center.x - radius * 0.48, y: center.y - radius * 0.48, width: radius * 0.96, height: radius * 0.96)
+        context.stroke(Path(ellipseIn: ring), with: .color(palette.poweredCore.opacity(alpha * 0.52)), lineWidth: 2)
+        let coreRadius = max(3, 12 * (1 - progress))
+        context.fill(Path(ellipseIn: CGRect(x: center.x - coreRadius, y: center.y - coreRadius, width: coreRadius * 2, height: coreRadius * 2)), with: .color(.white.opacity(alpha)))
     }
 
     private static func drawRocketFlame(context: inout GraphicsContext, center: CGPoint, palette: CircuitPalette, progress: Double, now: TimeInterval) {
@@ -481,6 +537,15 @@ private enum CircuitCanvasRenderer {
 
     private static func lerp(start: CGPoint, end: CGPoint, t: CGFloat) -> CGPoint {
         CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t)
+    }
+
+    private static func point(from center: CGPoint, direction: CGPoint, distance: CGFloat) -> CGPoint {
+        CGPoint(x: center.x + direction.x * distance, y: center.y + direction.y * distance)
+    }
+
+    private static func easeOut(_ value: CGFloat) -> CGFloat {
+        let clamped = min(1, max(0, value))
+        return 1 - (1 - clamped) * (1 - clamped)
     }
 
     private static func roundedRect(_ rect: CGRect, radius: CGFloat) -> Path {

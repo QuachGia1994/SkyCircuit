@@ -38,6 +38,8 @@ final class GameEngine {
 
     var target: Int { mode.target + max(0, level - 1) * 2 }
 
+    private let rocketFlightDuration = 1.55
+
     init() {
         let defaults = UserDefaults.standard
         best = defaults.integer(forKey: "skycircuit.native.best")
@@ -57,6 +59,10 @@ final class GameEngine {
         audio.setEffectsEnabled(soundEffectsEnabled)
         haptics.setEnabled(hapticsEnabled)
         restart()
+    }
+
+    func activateAudio() {
+        audio.activate()
     }
 
     func togglePause() {
@@ -152,7 +158,7 @@ final class GameEngine {
             burnAnimation = burn
             beginLaunch(burn.solution)
         case .launching:
-            guard let started = burn.launchStartedAt, now - started >= 0.72 else { return }
+            guard let started = burn.launchStartedAt, now - started >= rocketFlightDuration else { return }
             finishLaunch(burn.solution, at: now)
         }
     }
@@ -192,6 +198,7 @@ final class GameEngine {
         haptics.playLaunch(combo: combo)
         audio.playLaunch(combo: combo)
         audio.setMusicEnergy(combo: combo, igniting: true)
+        scheduleFireworkSound(rocketCount: rocketCount)
         status = rocketCount > 1
             ? L10n.format("status_rocket_multi_format", language: language, rocketCount, combo)
             : L10n.format("status_rocket_single_format", language: language, combo)
@@ -270,8 +277,20 @@ final class GameEngine {
 
     private func launchingFrame(_ burn: BurnAnimation, at now: TimeInterval) -> CircuitRenderFrame {
         let started = burn.launchStartedAt ?? now
-        let progress = min(1, max(0, (now - started) / 0.42))
+        let progress = min(1, max(0, (now - started) / rocketFlightDuration))
         return CircuitRenderFrame(powered: burn.solution.burned, burning: [], nextStage: [], rocketRows: Set(burn.solution.rocketRows), stageProgress: 1, launchProgress: progress)
+    }
+
+    private func scheduleFireworkSound(rocketCount: Int) {
+        Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(930))
+            } catch {
+                return
+            }
+            guard burnAnimation?.phase == .launching else { return }
+            audio.playFireworkBurst(rocketCount: rocketCount)
+        }
     }
 
     private func burnDuration(_ solution: LaunchSolution) -> Double {
