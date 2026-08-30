@@ -36,3 +36,13 @@ test('modal UI suspends heavy Canvas work', async () => {
   assert.match(source, /document\.body\.classList\.toggle\('modal-open', state\.uiPaused\)/)
   assert.match(source, /if \(state\.uiPaused\) \{\s*requestAnimationFrame\(frame\)\s*return\s*\}/)
 })
+
+test('Android and iOS share the fast ignition stage duration', async () => {
+  const [webSource, iosSource] = await Promise.all([
+    text('src/main.js'),
+    text('native/ios/SkyCircuitNative/Game/GameEngine.swift'),
+  ])
+
+  assert.match(webSource, /stageSeconds:\s*0\.14/)
+  assert.match(iosSource, /burnStageDuration\s*=\s*0\.14/)
+})

@@ -38,6 +38,7 @@ final class GameEngine {
 
     var target: Int { mode.target + max(0, level - 1) * 2 }
 
+    private let burnStageDuration = 0.14
     private let rocketFlightDuration = 1.55
 
     init() {
@@ -266,7 +267,7 @@ final class GameEngine {
     }
 
     private func burningFrame(_ burn: BurnAnimation, at now: TimeInterval) -> CircuitRenderFrame {
-        let raw = max(0, now - burn.startedAt) / 0.24
+        let raw = max(0, now - burn.startedAt) / burnStageDuration
         let completed = min(burn.solution.burnStages.count, Int(floor(raw)))
         let active = completed < burn.solution.burnStages.count ? completed : -1
         let powered = Set(burn.solution.burnStages.prefix(completed).flatMap { $0 })
@@ -294,7 +295,7 @@ final class GameEngine {
     }
 
     private func burnDuration(_ solution: LaunchSolution) -> Double {
-        Double(max(1, solution.burnStages.count)) * 0.24
+        Double(max(1, solution.burnStages.count)) * burnStageDuration
     }
 
     private func connectionQuality(row: Int, column: Int) -> Double {

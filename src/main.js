@@ -77,7 +77,7 @@ const elements = {
 }
 
 const layout = Object.freeze({ canvasWidth: 768, canvasHeight: 720, rows: 8, cols: 8, cell: 72, boardX: 96, boardY: 72, boardSize: 576 })
-const burnTiming = Object.freeze({ stageSeconds: 0.24, rocketHoldSeconds: 0.72 })
+const burnTiming = Object.freeze({ stageSeconds: 0.14, rocketHoldSeconds: 0.72 })
 const tutorialAccents = Object.freeze({ cyan: '#7be8ff', gold: '#ffd166', violet: '#c58cff' })
 const tilePool = [
   Direction.NORTH | Direction.SOUTH,
