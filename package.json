@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "build": "node scripts/build.mjs",
+    "docs:check": "node scripts/check-doc-links.mjs",
     "assets:generate": "npx capacitor-assets generate",
     "cap:add:android": "npx cap add android",
     "cap:add:ios": "npx cap add ios",
