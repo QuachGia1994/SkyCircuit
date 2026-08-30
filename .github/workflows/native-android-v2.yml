@@ -13,20 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
       - uses: android-actions/setup-android@v3
-      - name: Install Android 37 SDK
-        run: sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+      - name: Install Android 36 SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
-      - name: Build Native Android V2 APK
-        run: gradle :app:assembleDebug
+      - name: Build Native Android V2 unsigned APK
+        run: gradle :app:assembleRelease
         working-directory: native/android
+      - name: Verify Native Android V2 unsigned APK
+        run: test -f native/android/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: SkyCircuit-Native-Android-V2
-          path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          name: SkyCircuit-Native-Android-V2-Unsigned-APK
+          path: native/android/app/build/outputs/apk/release/app-release-unsigned.apk
