@@ -59,15 +59,16 @@ export class Board {
   resolveLaunch() {
     const accepted = new Map()
     const distances = new Map()
+    const claimedRocketRows = new Set()
     const rocketRows = []
 
     for (let row = 0; row < this.rows; row += 1) {
       if ((this.cells[row][0] & Direction.WEST) === 0) continue
-      if ((this.cells[row][this.cols - 1] & Direction.EAST) === 0) continue
-      const path = this.pairedRocketPath(row)
-      if (!path) continue
-      rocketRows.push(row)
-      path.forEach((cell, distance) => {
+      const result = this.nearestRocketPath(row, claimedRocketRows)
+      if (!result) continue
+      claimedRocketRows.add(result.rocketRow)
+      rocketRows.push(result.rocketRow)
+      result.path.forEach((cell, distance) => {
         const key = this.key(cell.row, cell.col)
         accepted.set(key, cell)
         distances.set(key, Math.min(distances.get(key) ?? distance, distance))
@@ -75,12 +76,11 @@ export class Board {
     }
 
     const burned = [...accepted.values()].sort((a, b) => a.row - b.row || a.col - b.col)
-    return { burned, rocketRows, burnStages: this.makeBurnStages(burned, distances) }
+    return { burned, rocketRows: rocketRows.sort((a, b) => a - b), burnStages: this.makeBurnStages(burned, distances) }
   }
 
-  pairedRocketPath(row) {
-    const source = { row, col: 0 }
-    const target = { row, col: this.cols - 1 }
+  nearestRocketPath(sourceRow, claimedRocketRows = new Set()) {
+    const source = { row: sourceRow, col: 0 }
     const queue = [source]
     const visited = new Set([this.key(source.row, source.col)])
     const parent = new Map()
@@ -89,7 +89,9 @@ export class Board {
     while (cursor < queue.length) {
       const cell = queue[cursor]
       cursor += 1
-      if (cell.row === target.row && cell.col === target.col) return this.reconstructPath(source, target, parent)
+      if (this.isUnclaimedRocketEndpoint(cell, claimedRocketRows)) {
+        return { rocketRow: cell.row, path: this.reconstructPath(source, cell, parent) }
+      }
       for (const next of this.connectedNeighbors(cell.row, cell.col)) {
         const nextKey = this.key(next.row, next.col)
         if (visited.has(nextKey)) continue
@@ -99,6 +101,11 @@ export class Board {
       }
     }
     return null
+  }
+
+  isUnclaimedRocketEndpoint(cell, claimedRocketRows) {
+    if (cell.col !== this.cols - 1 || claimedRocketRows.has(cell.row)) return false
+    return (this.cells[cell.row][cell.col] & Direction.EAST) !== 0
   }
 
   reconstructPath(source, target, parent) {

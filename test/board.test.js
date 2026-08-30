@@ -38,7 +38,7 @@ test('resolveLaunch burns only source components that reach a rocket', () => {
   assert.ok(result.burned.every(({ row }) => row === 0))
 })
 
-test('resolveLaunch only fires the rocket paired to its source row', () => {
+test('resolveLaunch fires only one reachable rocket for one source', () => {
   const board = Board.fromMasks([
     [Direction.SOUTH, Direction.SOUTH, Direction.SOUTH | Direction.EAST],
     [Direction.WEST | Direction.EAST | Direction.SOUTH, Direction.NORTH | Direction.EAST | Direction.WEST, Direction.NORTH | Direction.EAST | Direction.SOUTH | Direction.WEST],
@@ -50,6 +50,23 @@ test('resolveLaunch only fires the rocket paired to its source row', () => {
   assert.deepEqual(result.rocketRows, [1])
   assert.deepEqual(result.burned, [
     { row: 1, col: 0 },
+    { row: 1, col: 1 },
+    { row: 1, col: 2 },
+  ])
+})
+
+test('resolveLaunch allows a curved source path to reach a rocket on another row', () => {
+  const board = Board.fromMasks([
+    [Direction.WEST | Direction.EAST, Direction.WEST | Direction.SOUTH, Direction.NORTH | Direction.SOUTH],
+    [Direction.NORTH | Direction.SOUTH, Direction.NORTH | Direction.EAST, Direction.WEST | Direction.EAST],
+  ])
+
+  const result = board.resolveLaunch()
+
+  assert.deepEqual(result.rocketRows, [1])
+  assert.deepEqual(result.burned, [
+    { row: 0, col: 0 },
+    { row: 0, col: 1 },
     { row: 1, col: 1 },
     { row: 1, col: 2 },
   ])

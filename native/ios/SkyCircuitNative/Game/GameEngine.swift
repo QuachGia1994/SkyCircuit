@@ -310,23 +310,26 @@ final class GameEngine {
     private func resolveLaunch() -> LaunchSolution {
         var accepted: Set<CircuitCell> = []
         var rocketRows: Set<Int> = []
+        var claimedRocketRows: Set<Int> = []
         var distances: [CircuitCell: Int] = [:]
 
         for row in 0..<rows {
             let source = CircuitCell(row: row, column: 0)
             guard tile(row: row, column: 0)?.connections.contains(.west) == true else { continue }
-            guard let path = pairedRocketPath(from: source) else { continue }
-            rocketRows.insert(row)
-            mergePath(path, into: &accepted, distances: &distances)
+            guard let result = nearestRocketPath(from: source, claimedRocketRows: claimedRocketRows) else { continue }
+            claimedRocketRows.insert(result.rocketRow)
+            rocketRows.insert(result.rocketRow)
+            mergePath(result.path, into: &accepted, distances: &distances)
         }
 
         let stages = makeStages(cells: accepted, distances: distances)
         return LaunchSolution(burned: accepted, rocketRows: rocketRows.sorted(), burnStages: stages)
     }
 
-    private func pairedRocketPath(from source: CircuitCell) -> [CircuitCell]? {
-        let target = CircuitCell(row: source.row, column: columns - 1)
-        guard tile(row: target.row, column: target.column)?.connections.contains(.east) == true else { return nil }
+    private func nearestRocketPath(
+        from source: CircuitCell,
+        claimedRocketRows: Set<Int>
+    ) -> (rocketRow: Int, path: [CircuitCell])? {
         var queue = [source]
         var cursor = 0
         var visited: Set<CircuitCell> = [source]
@@ -335,7 +338,10 @@ final class GameEngine {
         while cursor < queue.count {
             let cell = queue[cursor]
             cursor += 1
-            if cell == target { return reconstructPath(from: source, to: target, parent: parent) }
+            if isUnclaimedRocketEndpoint(cell, claimedRocketRows: claimedRocketRows) {
+                guard let path = reconstructPath(from: source, to: cell, parent: parent) else { return nil }
+                return (cell.row, path)
+            }
             for next in neighbors(of: cell) where !visited.contains(next) {
                 visited.insert(next)
                 parent[next] = cell
@@ -343,6 +349,12 @@ final class GameEngine {
             }
         }
         return nil
+    }
+
+    private func isUnclaimedRocketEndpoint(_ cell: CircuitCell, claimedRocketRows: Set<Int>) -> Bool {
+        guard cell.column == columns - 1 else { return false }
+        guard !claimedRocketRows.contains(cell.row) else { return false }
+        return tile(row: cell.row, column: cell.column)?.connections.contains(.east) == true
     }
 
     private func reconstructPath(from source: CircuitCell, to target: CircuitCell, parent: [CircuitCell: CircuitCell]) -> [CircuitCell]? {

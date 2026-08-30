@@ -89,6 +89,20 @@ test('Android and iOS expose the same six launch languages', async () => {
   }
 })
 
+test('Android and iOS both resolve one reachable rocket per source without same-row restriction', async () => {
+  const [webBoard, iosEngine] = await Promise.all([
+    text('src/core/board.js'),
+    text('native/ios/SkyCircuitNative/Game/GameEngine.swift'),
+  ])
+
+  assert.match(webBoard, /nearestRocketPath\(sourceRow, claimedRocketRows/)
+  assert.match(webBoard, /isUnclaimedRocketEndpoint/)
+  assert.doesNotMatch(webBoard, /pairedRocketPath/)
+  assert.match(iosEngine, /nearestRocketPath\(/)
+  assert.match(iosEngine, /claimedRocketRows/)
+  assert.doesNotMatch(iosEngine, /pairedRocketPath/)
+})
+
 test('Android beta has explicit full-access build flag and Daily Run parity hooks', async () => {
   const [html, buildScript, workflow, source] = await Promise.all([
     text('index.html'),
