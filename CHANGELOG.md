@@ -23,4 +23,4 @@
 - Reduced mobile canvas cost by capping DPR at 2, removing per-particle blur, guarding HUD DOM writes, and adding iOS glass-filter and resize handling.
 - Cascade launches now expose an explicit combo chain in the HUD and scoring flow.
 - Native iOS rocket resolution now pairs each left source row to its matching right rocket row; one completed route launches one paired rocket, while multiple independently completed rows may still multi-launch.
-- Android CI now emits a true release unsigned beta APK instead of only a debug-signed APK; Native Android V2 pins Compose 1.11/BOM 2026.04.01 on stable Android API 36 and also emits an unsigned release APK.
+- Android CI now emits both a true release unsigned beta APK for archive/re-sign and a debug-signed installable beta APK for direct device testing; CI verifies the installable APK signature with `apksigner`. Native Android V2 remains pinned to Compose 1.11/BOM 2026.04.01 on stable Android API 36.
