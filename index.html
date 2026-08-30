@@ -7,6 +7,7 @@
     <title>SkyCircuit</title>
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
+    <script>globalThis.__SKYCIRCUIT_BETA__ = false</script>
   </head>
   <body>
     <div id="startup-splash" class="startup-splash" role="status" aria-label="SkyCircuit loading">
@@ -23,7 +24,10 @@
         <div class="brand-block">
           <p id="brand-eyebrow" class="eyebrow">FIREWORK CIRCUIT PUZZLE</p>
           <h1>SkyCircuit</h1>
-          <span id="mode-label" class="mode-label">Classic</span>
+          <div class="mode-actions">
+            <span id="mode-label" class="mode-label">Classic</span>
+            <button id="daily-button" class="daily-button" type="button"><span aria-hidden="true">🔥</span><b id="daily-label">DAILY</b></button>
+          </div>
         </div>
         <div class="top-actions">
           <button id="help-button" class="icon-button" type="button" aria-label="How to play">?</button>

@@ -20,6 +20,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm test
       - run: npm run build
+        env:
+          SKYCIRCUIT_BETA: '1'
       - run: npx cap add android
       - name: Remove Capacitor placeholder splash assets
         shell: bash

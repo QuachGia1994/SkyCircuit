@@ -24,6 +24,8 @@ const elements = {
   best: document.querySelector('#best'),
   level: document.querySelector('#level'),
   modeLabel: document.querySelector('#mode-label'),
+  dailyButton: document.querySelector('#daily-button'),
+  dailyLabel: document.querySelector('#daily-label'),
   status: document.querySelector('#status'),
   overlay: document.querySelector('#overlay'),
   overlayTitle: document.querySelector('#overlay-title'),
@@ -76,8 +78,14 @@ const elements = {
   hapticsToggle: document.querySelector('#haptics-toggle'),
 }
 
+const betaUnlocked = globalThis.__SKYCIRCUIT_BETA__ === true
 const layout = Object.freeze({ canvasWidth: 768, canvasHeight: 720, rows: 8, cols: 8, cell: 72, boardX: 96, boardY: 72, boardSize: 576 })
-const burnTiming = Object.freeze({ stageSeconds: 0.14, rocketHoldSeconds: 0.72 })
+const burnTiming = Object.freeze({
+  stageSeconds: 0.14,
+  rocketFlightSeconds: 1.55,
+  fireworkStartProgress: 0.58,
+  rocketVisibleUntilBurstProgress: 0.24,
+})
 const tutorialAccents = Object.freeze({ cyan: '#7be8ff', gold: '#ffd166', violet: '#c58cff' })
 const tilePool = [
   Direction.NORTH | Direction.SOUTH,
@@ -100,7 +108,8 @@ const particles = []
 const startupShownAt = performance.now()
 
 function createState(modeKey = localStorage.getItem('skycircuit.mode') ?? 'classic') {
-  const mode = getMode(modeKey)
+  const requestedMode = getMode(modeKey)
+  const mode = requestedMode.plus && !betaUnlocked ? getMode('classic') : requestedMode
   return {
     score: 0,
     best: Number(localStorage.getItem('skycircuit.best') ?? 0),
@@ -124,6 +133,9 @@ function createState(modeKey = localStorage.getItem('skycircuit.mode') ?? 'class
     musicEnabled: localStorage.getItem('skycircuit.music') !== '0',
     effectsEnabled: localStorage.getItem('skycircuit.effects') !== '0',
     hapticsEnabled: localStorage.getItem('skycircuit.haptics') !== '0',
+    dailyActive: false,
+    dailyProgress: 0,
+    dailyStreak: Math.max(1, Number(localStorage.getItem('skycircuit.dailyStreak') ?? 1)),
   }
 }
 
@@ -159,6 +171,7 @@ function applyTranslations() {
   setText(elements.bestLabel, t('best'))
   setText(elements.pause, state.paused ? t('resume') : t('pause'))
   setText(elements.restart, t('newGame'))
+  setText(elements.dailyLabel, t('daily'))
   setText(elements.settingsTitle, t('settings'))
   setText(elements.languageLabel, t('language'))
   setText(elements.musicLabel, t('music'))
@@ -192,7 +205,8 @@ function newGame(modeKey = state?.modeKey ?? localStorage.getItem('skycircuit.mo
   const skinKey = state?.skinKey ?? localStorage.getItem('skycircuit.skin') ?? 'classic'
   board = new Board(layout.rows, layout.cols, Math.random, tilePool)
   state = createState(modeKey)
-  state.skinKey = getSkin(skinKey).key
+  const restoredSkin = getSkin(skinKey)
+  state.skinKey = restoredSkin.plus && !betaUnlocked ? 'classic' : restoredSkin.key
   particles.length = 0
   hideOverlay()
   hideBurnBanner()
@@ -214,6 +228,7 @@ function updateHud() {
   setText(elements.best, String(state.best))
   setText(elements.level, String(state.level))
   setText(elements.modeLabel, translatedModeName(getMode(state.modeKey)))
+  elements.dailyButton.classList.toggle('active', state.dailyActive)
 }
 
 function setText(element, value) {
@@ -241,8 +256,9 @@ function handleBoardTap(event) {
   if (!tile) return
   ensureAudio()
   board.rotate(tile.row, tile.col)
-  playTone(360, 0.035, 'square', 0.025)
-  vibrate(8)
+  const quality = board.connectionQuality(tile.row, tile.col)
+  playPlacementSound(quality)
+  vibrate(Math.round(16 - quality * 8))
   const launch = board.resolveLaunch()
   if (launch.rocketRows.length > 0) startBurn(launch, 1)
   else state.combo = 1
@@ -254,7 +270,15 @@ function startBurn(launch, combo) {
   state.powered.clear()
   state.burning.clear()
   state.launchingRows.clear()
-  state.burn = { launch, elapsed: 0, activeStage: -1, stageProgress: 0, phase: 'burn', hold: 0 }
+  state.burn = {
+    launch,
+    elapsed: 0,
+    activeStage: -1,
+    stageProgress: 0,
+    phase: 'burn',
+    hold: 0,
+    fireworkTriggered: false,
+  }
   elements.status.textContent = t('statusIgnition')
   setAmbientEnergy(state.combo, true)
   elements.burnBanner.hidden = false
@@ -293,8 +317,7 @@ function beginRocketLaunch() {
   state.burn.hold = 0
   hideBurnBanner()
   applyLaunchScore(launch)
-  launch.rocketRows.forEach((row, index) => spawnFirework(row, index))
-  playLaunchSound(launch.rocketRows.length)
+  playLaunchSound(state.combo)
   vibrate(Math.min(95, 26 + launch.rocketRows.length * 14))
   elements.status.textContent = launch.rocketRows.length > 1
     ? tf('statusRocketMulti', { count: launch.rocketRows.length, combo: state.combo })
@@ -303,7 +326,13 @@ function beginRocketLaunch() {
 
 function updateRocketHold(deltaSeconds) {
   state.burn.hold += deltaSeconds
-  if (state.burn.hold >= burnTiming.rocketHoldSeconds) finishLaunch(state.burn.launch)
+  const progress = Math.min(1, state.burn.hold / burnTiming.rocketFlightSeconds)
+  if (!state.burn.fireworkTriggered && progress >= burnTiming.fireworkStartProgress) {
+    state.burn.fireworkTriggered = true
+    state.burn.launch.rocketRows.forEach((row, index) => spawnFirework(row, index))
+    playFireworkSound(state.burn.launch.rocketRows.length)
+  }
+  if (state.burn.hold >= burnTiming.rocketFlightSeconds) finishLaunch(state.burn.launch)
 }
 
 function applyLaunchScore(launch) {
@@ -312,6 +341,7 @@ function applyLaunchScore(launch) {
   const comboBonus = Math.max(0, state.combo - 1) * 125
   state.score += rocketCount * 100 + multiRocketBonus + comboBonus + launch.burned.length * 5
   state.launched += rocketCount
+  if (state.dailyActive) state.dailyProgress = Math.min(1, state.dailyProgress + rocketCount / Math.max(state.target, 1))
   if (state.score > state.best) {
     state.best = state.score
     localStorage.setItem('skycircuit.best', String(state.best))
@@ -348,10 +378,41 @@ function advanceLevel() {
 
 function setGameMode(modeKey) {
   const mode = getMode(modeKey)
+  if (mode.plus && !betaUnlocked) return
   localStorage.setItem('skycircuit.mode', mode.key)
   closePlusScreen()
   newGame(mode.key)
   elements.status.textContent = `${translatedModeName(mode)} · ${translatedModeDescription(mode)}`
+}
+
+function startDailyRun() {
+  if (state.resolving) {
+    elements.status.textContent = t('statusWaitIgnition')
+    return
+  }
+  refreshDailyStreak()
+  state.dailyActive = true
+  state.dailyProgress = 0
+  elements.status.textContent = `${t('daily')} · 🔥 ${state.dailyStreak}`
+  updateHud()
+}
+
+function refreshDailyStreak() {
+  const today = localDayKey(new Date())
+  const lastDay = localStorage.getItem('skycircuit.lastDaily')
+  if (lastDay === today) return
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  state.dailyStreak = lastDay === localDayKey(yesterday) ? state.dailyStreak + 1 : 1
+  localStorage.setItem('skycircuit.lastDaily', today)
+  localStorage.setItem('skycircuit.dailyStreak', String(state.dailyStreak))
+}
+
+function localDayKey(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function togglePause() {
@@ -389,7 +450,7 @@ function hideBurnBanner() {
 
 function dismissStartupSplash() {
   const elapsed = performance.now() - startupShownAt
-  const delay = Math.max(0, 1_350 - elapsed)
+  const delay = Math.max(0, 4_000 - elapsed)
   setTimeout(() => {
     if (elements.startupSplash.hidden) return
     elements.startupSplash.classList.add('is-hiding')
@@ -573,6 +634,7 @@ function handlePlusClick(event) {
 
 function applySkin(skinKey, persist = true) {
   const skin = getSkin(skinKey)
+  if (skin.plus && !betaUnlocked) return
   state.skinKey = skin.key
   if (persist) localStorage.setItem('skycircuit.skin', skin.key)
   document.documentElement.style.setProperty('--accent', skin.cssAccent)
@@ -946,6 +1008,15 @@ function lerpPoint(start, end, t) {
   return { x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t }
 }
 
+function easeOut(value) {
+  const clamped = Math.min(1, Math.max(0, value))
+  return 1 - (1 - clamped) * (1 - clamped)
+}
+
+function rocketFlightTarget(row) {
+  return { x: 585 + (row % 3) * 55, y: 70 + row * 25 }
+}
+
 function drawBurnOrb(x, y, skin) {
   const pulse = 1 + Math.sin(performance.now() * 0.02) * 0.1
   context.save()
@@ -1044,7 +1115,13 @@ function drawRockets() {
     const y = layout.boardY + row * layout.cell + layout.cell / 2
     const launching = state.launchingRows.has(row)
     const hot = launching || state.powered.has(`${row}:${layout.cols - 1}`)
-    const launchProgress = launching ? Math.min(1, state.burn?.hold / 0.42 ?? 0) : 0
+    const launchProgress = launching ? Math.min(1, state.burn?.hold / burnTiming.rocketFlightSeconds ?? 0) : 0
+    const flightProgress = Math.min(1, launchProgress / 0.62)
+    const burstProgress = Math.min(1, Math.max(0, (launchProgress - burnTiming.fireworkStartProgress) / (1 - burnTiming.fireworkStartProgress)))
+    const target = rocketFlightTarget(row)
+    const rocketPosition = launching
+      ? lerpPoint({ x: 718, y }, target, easeOut(flightProgress))
+      : { x: 718, y }
 
     context.lineCap = 'round'
     context.strokeStyle = '#05080d'
@@ -1081,9 +1158,11 @@ function drawRockets() {
     context.arc(692, y, 7, 0, Math.PI * 2)
     context.fill()
 
+    if (launching && burstProgress >= burnTiming.rocketVisibleUntilBurstProgress) continue
+
     context.save()
-    context.translate(718, y - launchProgress * 27)
-    if (launching) drawRocketFlame(launchProgress, skin)
+    context.translate(rocketPosition.x, rocketPosition.y)
+    if (launching) drawRocketFlame(flightProgress, skin)
 
     const hull = context.createLinearGradient(-14, 0, 14, 0)
     hull.addColorStop(0, skin.rocketDark)
@@ -1185,11 +1264,22 @@ function spawnBurnSparks(stage) {
 
 function spawnFirework(row, variant) {
   const skin = getSkin(state.skinKey)
-  const y = layout.boardY + row * layout.cell + layout.cell / 2
-  for (let index = 0; index < 30; index += 1) {
-    const angle = Math.PI * 2 * index / 30 + variant * 0.17
-    const speed = 75 + Math.random() * 135
-    particles.push({ x: 742, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 0.8 + Math.random() * 0.35, age: 0, gravity: 55, size: 3.5, color: skin.powered })
+  const center = rocketFlightTarget(row)
+  const colors = [skin.poweredCore, skin.powered, skin.rocketLight, '#ffffff']
+  for (let index = 0; index < 22; index += 1) {
+    const angle = Math.PI * 2 * index / 22 + variant * 0.37
+    const speed = 105 + ((index * 17 + variant * 11) % 29) * 4.2
+    particles.push({
+      x: center.x,
+      y: center.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 0.88 + (index % 5) * 0.055,
+      age: 0,
+      gravity: 42,
+      size: index % 4 === 0 ? 3.4 : 2.2,
+      color: colors[index % colors.length],
+    })
   }
 }
 
@@ -1249,37 +1339,57 @@ function roundRect(x, y, width, height, radius) {
 }
 
 function ensureAudio() {
-  if (!audioContext) audioContext = new AudioContext()
-  if (audioContext.state === 'suspended') audioContext.resume()
+  if (!audioContext) {
+    const AudioContextType = globalThis.AudioContext ?? globalThis.webkitAudioContext
+    if (!AudioContextType) return
+    audioContext = new AudioContextType()
+  }
+  if (audioContext.state === 'suspended') void audioContext.resume()
   if (!ambientStarted) startAmbientMusic()
   setAmbientEnergy(state.combo, Boolean(state.burn))
 }
 
+function bootstrapAmbientAudio() {
+  if (!state?.musicEnabled) return
+  ensureAudio()
+}
+
 function startAmbientMusic() {
   if (!audioContext || ambientStarted) return
+  const source = audioContext.createBufferSource()
+  source.buffer = makeAmbientBuffer(audioContext)
+  source.loop = true
   ambientGain = audioContext.createGain()
-  const filter = audioContext.createBiquadFilter()
-  filter.type = 'lowpass'
-  filter.frequency.value = 880
-  for (const [index, frequency] of [110, 164.81, 220].entries()) {
-    const oscillator = audioContext.createOscillator()
-    const gain = audioContext.createGain()
-    oscillator.type = index === 0 ? 'sine' : 'triangle'
-    oscillator.frequency.value = frequency
-    gain.gain.value = index === 0 ? 0.55 : 0.22
-    oscillator.connect(gain).connect(filter)
-    oscillator.start()
-    ambientNodes.push(oscillator, gain)
-  }
-  filter.connect(ambientGain).connect(audioContext.destination)
+  source.connect(ambientGain).connect(audioContext.destination)
   ambientGain.gain.value = 0
-  ambientNodes.push(filter)
+  source.start()
+  ambientNodes.push(source)
   ambientStarted = true
+}
+
+function makeAmbientBuffer(audio) {
+  const duration = 8
+  const frameCount = Math.floor(audio.sampleRate * duration)
+  const buffer = audio.createBuffer(1, frameCount, audio.sampleRate)
+  const channel = buffer.getChannelData(0)
+  const roots = [110, 130.81, 146.83, 98]
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const time = frame / audio.sampleRate
+    const root = roots[Math.min(roots.length - 1, Math.floor(time / 2))]
+    const breath = 0.72 + 0.28 * Math.sin(Math.PI * time / 2)
+    const pad = Math.sin(2 * Math.PI * root * time)
+      + 0.48 * Math.sin(2 * Math.PI * root * 1.5 * time + 0.7)
+      + 0.24 * Math.sin(2 * Math.PI * root * 2 * time + 1.4)
+    const shimmer = 0.15 * Math.sin(2 * Math.PI * 0.19 * time) * Math.sin(2 * Math.PI * root * 4 * time)
+    channel[frame] = (pad * 0.035 + shimmer * 0.018) * breath
+  }
+  return buffer
 }
 
 function setAmbientEnergy(combo, igniting) {
   if (!audioContext || !ambientGain) return
-  const target = state.musicEnabled ? Math.min(0.052, 0.026 + combo * 0.002 + (igniting ? 0.012 : 0)) : 0
+  const comboLift = Math.min(combo, 8) * 0.018
+  const target = state.musicEnabled ? Math.min(0.68, 0.44 + comboLift + (igniting ? 0.08 : 0)) : 0
   ambientGain.gain.cancelScheduledValues(audioContext.currentTime)
   ambientGain.gain.linearRampToValueAtTime(target, audioContext.currentTime + 0.28)
 }
@@ -1297,10 +1407,22 @@ function playTone(frequency, duration, type, gainValue) {
   oscillator.stop(audioContext.currentTime + duration)
 }
 
-function playLaunchSound(count) {
+function playPlacementSound(quality) {
+  const normalized = Math.min(1, Math.max(0, quality))
+  playTone(240 + normalized * 420, 0.045, 'sine', 0.05)
+}
+
+function playLaunchSound(combo) {
   ensureAudio()
-  playTone(250 + count * 30, 0.16, 'triangle', 0.05)
-  setTimeout(() => playTone(520 + count * 45, 0.18, 'sine', 0.04), 70)
+  playTone(430 + Math.min(combo, 8) * 55, 0.16, 'sine', 0.06)
+}
+
+function playFireworkSound(count) {
+  ensureAudio()
+  const lift = Math.min(count, 4) * 26
+  for (const frequency of [659.25 + lift, 783.99 + lift, 1046.5 + lift]) {
+    playTone(frequency, 0.32, 'sine', 0.035)
+  }
 }
 
 function vibrate(duration) {
@@ -1335,6 +1457,7 @@ function configureCanvasResolution() {
 canvas.addEventListener('pointerdown', handleBoardTap)
 elements.pause.addEventListener('click', togglePause)
 elements.restart.addEventListener('click', () => newGame())
+elements.dailyButton.addEventListener('click', startDailyRun)
 elements.helpButton.addEventListener('click', () => openTutorial(0))
 elements.settingsButton.addEventListener('click', openSettingsScreen)
 elements.plusButton.addEventListener('click', openPlusScreen)
@@ -1350,8 +1473,11 @@ elements.effectsToggle.addEventListener('change', (event) => setEffectsEnabled(e
 elements.hapticsToggle.addEventListener('change', (event) => setHapticsEnabled(event.target.checked))
 window.addEventListener('resize', configureCanvasResolution)
 document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) bootstrapAmbientAudio()
   if (document.hidden && state && !state.gameOver && !state.paused && !state.resolving && !state.uiPaused) togglePause()
 })
+window.addEventListener('pointerdown', bootstrapAmbientAudio, { capture: true, passive: true })
+window.addEventListener('keydown', bootstrapAmbientAudio, { capture: true })
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return
@@ -1362,6 +1488,7 @@ document.addEventListener('keydown', (event) => {
 
 configureCanvasResolution()
 newGame()
+bootstrapAmbientAudio()
 render()
 requestAnimationFrame(() => requestAnimationFrame(dismissStartupSplash))
 requestAnimationFrame(frame)

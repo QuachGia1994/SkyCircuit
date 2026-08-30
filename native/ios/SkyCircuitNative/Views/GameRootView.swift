@@ -45,9 +45,15 @@ struct GameRootView: View {
         HStack(alignment: .top, spacing: 10) {
             brand
             Spacer(minLength: 4)
-            iconButton("questionmark", accent: chrome.cyan) { showTutorial = true }
+            iconButton("questionmark", accent: chrome.cyan) {
+                guard engine.burnAnimation == nil else { return }
+                showTutorial = true
+            }
             iconButton("gearshape.fill", accent: .white.opacity(0.72)) { showSettings = true }
-            Button(L10n.text("plus", language: engine.language)) { showPlus = true }
+            Button(L10n.text("plus", language: engine.language)) {
+                guard engine.burnAnimation == nil else { return }
+                showPlus = true
+            }
                 .buttonStyle(GlassTextButtonStyle(accent: chrome.gold))
         }
     }

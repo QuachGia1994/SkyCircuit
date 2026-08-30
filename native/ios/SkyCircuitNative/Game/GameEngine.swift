@@ -171,6 +171,7 @@ final class GameEngine {
     }
 
     func startDailyRun() {
+        guard burnAnimation == nil else { return }
         refreshDailyStreak()
         phase = .playing
         dailyProgress = 0
