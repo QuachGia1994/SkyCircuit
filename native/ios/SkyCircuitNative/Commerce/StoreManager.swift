@@ -5,7 +5,7 @@ import StoreKit
 @Observable
 final class StoreManager {
     var products: [Product] = []
-    var hasPlus = Self.betaUnlocked
+    var hasPlus = false
     var lastError: String?
 
     private let productIDs = ["com.skycircuit.plus.weekly", "com.skycircuit.plus.monthly"]
@@ -14,6 +14,7 @@ final class StoreManager {
     var isBetaUnlocked: Bool { Self.betaUnlocked }
 
     init() {
+        hasPlus = Self.betaUnlocked
         guard !Self.betaUnlocked else { return }
         observerTask = Task { [weak self] in
             await self?.observeTransactions()
